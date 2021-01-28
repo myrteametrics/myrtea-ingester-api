@@ -178,10 +178,14 @@ func ApplyFieldReplaceIfMissing(fieldReplace []string, enricherSource map[string
 // ApplyFieldReplace applies all FieldReplace merging configuration on input documents
 func ApplyFieldReplace(fieldReplace []string, enricherSource map[string]interface{}, outputSource map[string]interface{}) {
 	for _, field := range fieldReplace {
-		if _, ok := enricherSource[field]; ok {
-			outputSource[field] = enricherSource[field]
+		if val, ok := enricherSource[field]; ok {
+			if !isEmpty(val) {
+				outputSource[field] = enricherSource[field]
+			}
 		} else if val, found := utils.LookupNestedMap(strings.Split(field, "."), enricherSource); found {
-			utils.PatchNestedMap(strings.Split(field, "."), outputSource, val)
+			if !isEmpty(val) {
+				utils.PatchNestedMap(strings.Split(field, "."), outputSource, val)
+			}
 		}
 	}
 }
@@ -284,5 +288,17 @@ func addKeys(source map[string]interface{}, target map[string]interface{}) {
 				target[key] = nil
 			}
 		}
+	}
+}
+
+func isEmpty(value interface{}) bool {
+	if value == nil {
+		return true
+	}
+	switch val := value.(type) {
+	case string:
+		return val == ""
+	default:
+		return false
 	}
 }
