@@ -8,6 +8,117 @@ import (
 	"github.com/myrteametrics/myrtea-sdk/v4/models"
 )
 
+func TestMergeMath(t *testing.T) {
+	testMerge(t,
+		Config{Type: "doc", Mode: Self, ExistingAsMaster: true,
+			Groups: []Group{
+				{
+					Condition: "datemillis(New.DT_ITMATT_IMP) < datemillis(Existing.DT_ITMATT_IMP)",
+					FieldReplace: []string{
+						"DT_ITMATT_IMP",
+					},
+				},
+				{
+					Condition: "datemillis(New.DT_ITMATT_EXP) < datemillis(Existing.DT_ITMATT_EXP)",
+					FieldReplace: []string{
+						"DT_ITMATT_EXP",
+					},
+				},
+				{
+					Condition: "datemillis(Existing.DT_DEADLINE_ITMATT_EXP) < datemillis(New.DT_ITMATT_EXP)",
+					FieldMath: []FieldMath{
+						{Expression: "\"LATE\"", OutputField: "ITMATT_EXP_STATUS"},
+					},
+				},
+				{
+					Condition: "datemillis(Existing.DT_DEADLINE_ITMATT_EXP) >= datemillis(New.DT_ITMATT_EXP)",
+					FieldMath: []FieldMath{
+						{Expression: "\"OK\"", OutputField: "ITMATT_EXP_STATUS"},
+					},
+				},
+				{
+					FieldReplaceIfMissing: []string{
+						"ID_COLIS",
+						"DT_ITMATT_IMP",
+						"DT_ITMATT_EXP",
+					},
+				},
+			},
+		},
+		&models.Document{ID: "1", IndexType: "doc", Source: map[string]interface{}{
+			"ID_COLIS":      "1",
+			"DT_ITMATT_EXP": "2021-07-19T06:50:00.000",
+		}},
+		&models.Document{ID: "1", IndexType: "doc", Source: map[string]interface{}{
+			"ID_COLIS":               "1",
+			"DT_FLASH_MLVEXP":        "2021-07-19T06:50:00.000",
+			"DT_DEADLINE_ITMATT_EXP": "2021-07-20T14:00:00.000",
+			"ITMATT_EXP_STATUS":      "MISSING",
+		}},
+		&models.Document{ID: "1", IndexType: "doc", Source: map[string]interface{}{
+			"ID_COLIS":               "1",
+			"DT_FLASH_MLVEXP":        "2021-07-19T06:50:00.000",
+			"DT_DEADLINE_ITMATT_EXP": "2021-07-20T14:00:00.000",
+			"DT_ITMATT_EXP":          "2021-07-19T06:50:00.000",
+			"ITMATT_EXP_STATUS":      "OK",
+		}},
+	)
+}
+
+func TestMergeMathReverse(t *testing.T) {
+	testMerge(t,
+		Config{Type: "doc", Mode: Self, ExistingAsMaster: true,
+			Groups: []Group{
+				// {
+				// 	Condition: "datemillis(New.DT_FLASH_MLVEXP) < datemillis(Existing.DT_FLASH_MLVEXP)",
+				// 	FieldReplace: []string{
+				// 		"DT_FLASH_MLVEXP",
+				// 		"DT_DEADLINE_ITMATT_EXP",
+				// 	},
+				// },
+				{
+					Condition: "datemillis(New.DT_DEADLINE_ITMATT_EXP) < datemillis(Existing.DT_ITMATT_EXP)",
+					FieldMath: []FieldMath{
+						{Expression: "\"LATE\"", OutputField: "ITMATT_EXP_STATUS"},
+					},
+				},
+				{
+					Condition: "datemillis(New.DT_DEADLINE_ITMATT_EXP) >= datemillis(Existing.DT_ITMATT_EXP)",
+					FieldMath: []FieldMath{
+						{Expression: "\"OK\"", OutputField: "ITMATT_EXP_STATUS"},
+					},
+				},
+				{
+					FieldReplaceIfMissing: []string{
+						"ID_COLIS",
+						"DT_FLASH_MLVEXP",
+						"DT_DEADLINE_ITMATT_EXP",
+						"ITMATT_EXP_STATUS",
+					},
+				},
+			},
+		},
+		&models.Document{ID: "1", IndexType: "doc", Source: map[string]interface{}{
+			"ID_COLIS":               "1",
+			"DT_FLASH_MLVEXP":        "2021-07-19T06:50:00.000",
+			"DT_DEADLINE_ITMATT_EXP": "2021-07-20T14:00:00.000",
+		}},
+		&models.Document{ID: "1", IndexType: "doc", Source: map[string]interface{}{
+			"ID_COLIS":          "1",
+			"DT_ITMATT_EXP":     "2021-07-19T06:50:00.000",
+			"ITMATT_EXP_STATUS": "MISSING",
+		}},
+		&models.Document{ID: "1", IndexType: "doc", Source: map[string]interface{}{
+			"ID_COLIS":               "1",
+			"DT_FLASH_MLVEXP":        "2021-07-19T06:50:00.000",
+			"DT_DEADLINE_ITMATT_EXP": "2021-07-20T14:00:00.000",
+			"DT_ITMATT_EXP":          "2021-07-19T06:50:00.000",
+			"ITMATT_EXP_STATUS":      "OK",
+		}},
+	)
+
+}
+
 func TestMergeConfigReplace(t *testing.T) {
 	testMerge(t,
 		Config{Type: "doc", Mode: Self, ExistingAsMaster: true,
