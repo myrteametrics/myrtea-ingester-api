@@ -194,14 +194,31 @@ func ApplyFieldReplace(fieldReplace []string, enricherSource map[string]interfac
 func ApplyFieldMerge(fieldMerge []string, enricherSource map[string]interface{}, outputSource map[string]interface{}) {
 	for _, field := range fieldMerge {
 		if _, ok := enricherSource[field]; ok {
-			outputSlice, okOutputSlice := outputSource[field].([]interface{})
-			enricherSlice, okEnricherSlice := enricherSource[field].([]interface{})
-			if !okOutputSlice && !okEnricherSlice {
-				zap.L().Warn("Cannot cast object into slice, skipping merge", zap.String("field", field))
-				continue
+			m := make(map[interface{}]bool)
+
+			switch v := outputSource[field].(type) {
+			case []interface{}:
+				for _, e := range v {
+					m[e] = true
+				}
+			case interface{}:
+				m[v] = true
 			}
-			outputSlice = append(outputSlice, enricherSlice...)
-			outputSource[field] = outputSlice
+
+			switch v := enricherSource[field].(type) {
+			case []interface{}:
+				for _, e := range v {
+					m[e] = true
+				}
+			case interface{}:
+				m[v] = true
+			}
+
+			newSlice := make([]interface{}, 0)
+			for k := range m {
+				newSlice = append(newSlice, k)
+			}
+			outputSource[field] = newSlice
 		}
 	}
 }

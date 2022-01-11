@@ -697,6 +697,35 @@ func TestFieldKeepLatest(t *testing.T) {
 	)
 }
 
+func TestFieldMergeArray(t *testing.T) {
+
+	testMerge(t,
+		Config{Type: "doc", Mode: Self, ExistingAsMaster: true,
+			Groups: []Group{
+				{
+					FieldMerge: []string{"a"},
+				},
+			},
+		},
+		&models.Document{ID: "1", IndexType: "doc", Source: map[string]interface{}{"a": []interface{}{"test1"}}},
+		&models.Document{ID: "2", IndexType: "doc", Source: map[string]interface{}{"a": []interface{}{"test2", "test1"}}},
+		&models.Document{ID: "2", IndexType: "doc", Source: map[string]interface{}{"a": []interface{}{"test2", "test1"}}},
+	)
+
+	testMerge(t,
+		Config{Type: "doc", Mode: Self, ExistingAsMaster: true,
+			Groups: []Group{
+				{
+					FieldMerge: []string{"a"},
+				},
+			},
+		},
+		&models.Document{ID: "1", IndexType: "doc", Source: map[string]interface{}{"a": "test1"}},
+		&models.Document{ID: "2", IndexType: "doc", Source: map[string]interface{}{"a": "test2"}},
+		&models.Document{ID: "2", IndexType: "doc", Source: map[string]interface{}{"a": []interface{}{"test2", "test1"}}},
+	)
+}
+
 func testMerge(t *testing.T, config Config, new *models.Document, existing *models.Document, expected *models.Document) *models.Document {
 	out := config.Apply(new, existing)
 	outJSON, _ := json.Marshal(*out)
