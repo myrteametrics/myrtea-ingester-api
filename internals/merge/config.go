@@ -195,17 +195,17 @@ func ApplyFieldReplace(fieldReplace []string, enricherSource map[string]interfac
 }
 
 //ApplyFieldForceUpdate applies FieldForceUpdate merging configuration on input documents
-func ApplyFieldForceUpdate(fieldReplace []string, enricherSource map[string]interface{}, outputSource map[string]interface{}) {
-	for _, field := range fieldReplace {
+func ApplyFieldForceUpdate(fieldUpdate []string, enricherSource map[string]interface{}, outputSource map[string]interface{}) {
+	for _, field := range fieldUpdate {
 		if val, ok := enricherSource[field]; ok {
 			if isEmpty(val){
-				delete(enricherSource, field)
+				delete(outputSource, field)
 			} else {
 				outputSource[field] = enricherSource[field]
 			}
 		} else if val, found := utils.LookupNestedMap(strings.Split(field, "."), enricherSource); found {
 			if isEmpty(val){
-				utils.DeleteNestedMap(strings.Split(field, "."), enricherSource)
+				utils.DeleteNestedMap(strings.Split(field, "."), outputSource)
 			} else {
 				utils.PatchNestedMap(strings.Split(field, "."), outputSource, val)
 			}
