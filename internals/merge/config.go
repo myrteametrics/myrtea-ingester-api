@@ -29,6 +29,7 @@ type Group struct {
 	FieldMath             []FieldMath `json:"fieldMath,omitempty"`
 	FieldKeepLatest       []string    `json:"fieldKeepLatest,omitempty"`
 	FieldKeepEarliest     []string    `json:"fieldKeepEarliest,omitempty"`
+	FieldForceUpdate	  []string	  `json:"fieldForceUpdate,omitempty"`
 }
 
 // FieldMath specify a merge rule using a math expression
@@ -127,6 +128,9 @@ func (config *Config) Apply(newDoc *models.Document, existingDoc *models.Documen
 			// keepBigger + keepMostrecent etc...
 			// keepSmaller + keepOlder etc...
 			// ...
+
+			ApplyFieldForceUpdate(mergeGroup.FieldForceUpdate, enricherSource, outputSource)
+			// zap.L().Debug("update", zap.Any("source", outputSource))
 		}
 	}
 	return output
@@ -188,6 +192,25 @@ func ApplyFieldReplace(fieldReplace []string, enricherSource map[string]interfac
 			}
 		}
 	}
+}
+
+//ApplyFieldForceUpdate applies FieldForceUpdate merging configuration on input documents
+func ApplyFieldForceUpdate(fieldReplace []string, enricherSource map[string]interface{}, outputSource map[string]interface{}) {
+	for _, field := range fieldReplace {
+		if val, ok := enricherSource[field]; ok {
+			if isEmpty(val){
+				delete(enricherSource, field)
+			} else {
+				outputSource[field] = enricherSource[field]
+			}
+		} else if val, found := utils.LookupNestedMap(strings.Split(field, "."), enricherSource); found {
+			if isEmpty(val){
+				utils.DeleteNestedMap(strings.Split(field, "."), enricherSource)
+			} else {
+				utils.PatchNestedMap(strings.Split(field, "."), outputSource, val)
+			}
+		}
+	}	
 }
 
 // ApplyFieldMerge applies all FieldReplace merging configuration on input documents
