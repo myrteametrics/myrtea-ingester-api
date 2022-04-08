@@ -726,6 +726,63 @@ func TestFieldMergeArray(t *testing.T) {
 	)
 }
 
+func TestMergeForceUpdate(t *testing.T) {
+	testMerge(t,
+		Config{Type: "doc", Mode: Self, ExistingAsMaster: true,
+			Groups: []Group{
+				{FieldForceUpdate: []string{"a"}},
+			},
+		},
+		&models.Document{ID: "2", IndexType: "doc", Source: map[string]interface{}{"a": ""}},
+		&models.Document{ID: "1", IndexType: "doc", Source: map[string]interface{}{"a": "existing_value"}},
+		&models.Document{ID: "1", IndexType: "doc", Source: map[string]interface{}{}},
+	)
+
+	testMerge(t,
+		Config{Type: "doc", Mode: Self, ExistingAsMaster: true,
+			Groups: []Group{
+				{FieldForceUpdate: []string{"a.b"}},
+			},
+		},
+		&models.Document{ID: "2", IndexType: "doc", Source: map[string]interface{}{"a": map[string]interface{}{"b": ""}}},
+		&models.Document{ID: "1", IndexType: "doc", Source: map[string]interface{}{"a": map[string]interface{}{"b": "existing_value"}}},
+		&models.Document{ID: "1", IndexType: "doc", Source: map[string]interface{}{"a": map[string]interface{}{}}},
+	)
+
+	testMerge(t,
+		Config{Type: "doc", Mode: Self, ExistingAsMaster: true,
+			Groups: []Group{
+				{FieldForceUpdate: []string{"a.b", "c.d"}},
+			},
+		},
+		&models.Document{ID: "2", IndexType: "doc", Source: map[string]interface{}{"c": map[string]interface{}{"d": "new_value"}}},
+		&models.Document{ID: "1", IndexType: "doc", Source: map[string]interface{}{"a": map[string]interface{}{"b": "existing_value"}}},
+		&models.Document{ID: "1", IndexType: "doc", Source: map[string]interface{}{"a": map[string]interface{}{"b": "existing_value"}, "c": map[string]interface{}{"d": "new_value"}}},
+	)
+
+	testMerge(t,
+		Config{Type: "doc", Mode: Self, ExistingAsMaster: true,
+			Groups: []Group{
+				{FieldForceUpdate: []string{"a.b", "c.d"}},
+			},
+		},
+		&models.Document{ID: "2", IndexType: "doc", Source: map[string]interface{}{"c": map[string]interface{}{"d": "new_value"}}},
+		&models.Document{ID: "1", IndexType: "doc", Source: map[string]interface{}{"a": map[string]interface{}{"b": "existing_value"}, "c": map[string]interface{}{"e": "existing_value"}}},
+		&models.Document{ID: "1", IndexType: "doc", Source: map[string]interface{}{"a": map[string]interface{}{"b": "existing_value"}, "c": map[string]interface{}{"e": "existing_value", "d": "new_value"}}},
+	)
+
+	testMerge(t,
+		Config{Type: "doc", Mode: Self, ExistingAsMaster: true,
+			Groups: []Group{
+				{FieldForceUpdate: []string{"a.b", "c.d"}},
+			},
+		},
+		&models.Document{ID: "2", IndexType: "doc", Source: map[string]interface{}{"a": "new_value"}},
+		&models.Document{ID: "1", IndexType: "doc", Source: map[string]interface{}{"a": map[string]interface{}{"b": "existing_value"}}},
+		&models.Document{ID: "1", IndexType: "doc", Source: map[string]interface{}{"a": map[string]interface{}{"b": "existing_value"}}},
+	)
+}
+
 func testMerge(t *testing.T, config Config, new *models.Document, existing *models.Document, expected *models.Document) *models.Document {
 	out := config.Apply(new, existing)
 	outJSON, _ := json.Marshal(*out)
