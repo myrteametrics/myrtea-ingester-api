@@ -12,7 +12,7 @@ require (
 	github.com/go-openapi/spec v0.19.4 // indirect
 	github.com/json-iterator/go v1.1.8
 	github.com/mailru/easyjson v0.7.0 // indirect
-	github.com/myrteametrics/myrtea-sdk/v4 v4.0.0-20220408100104-3d0ca2264023
+	github.com/myrteametrics/myrtea-sdk/v4 v4.0.0-20220413080843-f479385207be
 	github.com/spf13/viper v1.3.1
 	github.com/swaggo/http-swagger v0.0.0-20190614090009-c2865af9083e
 	github.com/swaggo/swag v1.6.3
