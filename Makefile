@@ -17,9 +17,9 @@ GO111MODULE ?= on
 GOSUMDB ?= off
 
 GO_PACKAGE ?= go list ./... | \
-	grep github.com/myrteametrics/myrtea-ingester-api/v4/ | \
-	grep -v -e "github.com/myrteametrics/myrtea-ingester-api/v4/docs" | \
-	grep -v -e "github.com/myrteametrics/myrtea-ingester-api/v4/internals/tests"
+	grep github.com/myrteametrics/myrtea-ingester-api/v5/ | \
+	grep -v -e "github.com/myrteametrics/myrtea-ingester-api/v5/docs" | \
+	grep -v -e "github.com/myrteametrics/myrtea-ingester-api/v5/internals/tests"
 
 export GOBIN ?= $(shell go env GOPATH)/bin
 
@@ -46,7 +46,7 @@ test-integration-lw:
 
 .PHONY: test-integration-lw-package ## Test the code
 test-integration-lw-package:
-	GO111MODULE=$(GO111MODULE) GOSUMDB=$(GOSUMDB) CGO_ENABLED=0 go test -p=1 github.com/myrteametrics/myrtea-ingester-api/v4/internals/$(GO_PACKAGE)
+	GO111MODULE=$(GO111MODULE) GOSUMDB=$(GOSUMDB) CGO_ENABLED=0 go test -p=1 github.com/myrteametrics/myrtea-ingester-api/v5/internals/$(GO_PACKAGE)
 
 .PHONY: test-integration ## Test the code
 test-integration:
@@ -59,7 +59,7 @@ test-integration:
 .PHONY: test-integration-package ## Test the code
 test-integration-package:
 	mkdir -p coverage
-	GO111MODULE=$(GO111MODULE) GOSUMDB=$(GOSUMDB) CGO_ENABLED=0 go test -p=1 -cover -coverpkg=github.com/myrteametrics/myrtea-ingester-api/v4/internals/$(GO_PACKAGE) -coverprofile=coverage/profile.out github.com/myrteametrics/myrtea-ingester-api/v4/internals/$(GO_PACKAGE)
+	GO111MODULE=$(GO111MODULE) GOSUMDB=$(GOSUMDB) CGO_ENABLED=0 go test -p=1 -cover -coverpkg=github.com/myrteametrics/myrtea-ingester-api/v5/internals/$(GO_PACKAGE) -coverprofile=coverage/profile.out github.com/myrteametrics/myrtea-ingester-api/v5/internals/$(GO_PACKAGE)
 	go tool cover -html=coverage/profile.out -o coverage/coverage.html
 	go tool cover -func=coverage/profile.out -o coverage/coverage.txt
 	cat coverage/coverage.txt
@@ -85,7 +85,7 @@ $(GOLANGCILINT):
 
 .PHONY: lint ## Lint the code
 lint:
-	golint -set_exit_status=true $$(go list ./... | grep github.com/myrteametrics/myrtea-ingester-api/v4)
+	golint -set_exit_status=true $$(go list ./... | grep github.com/myrteametrics/myrtea-ingester-api/v5)
 # lint: $(GOLANGCILINT)
 # 	golangci-lint run
 

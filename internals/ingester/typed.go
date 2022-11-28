@@ -4,7 +4,10 @@ import (
 	"hash/fnv"
 	"time"
 
-	"github.com/myrteametrics/myrtea-ingester-api/v4/internals/merge"
+	"github.com/go-kit/kit/metrics"
+	"github.com/go-kit/kit/metrics/prometheus"
+	config "github.com/myrteametrics/myrtea-ingester-api/v5/internals/configuration"
+	stdprometheus "github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
@@ -19,23 +22,38 @@ import (
 // TypedIngester is a component which process IngestRequest
 // It generates UpdateCommand which are processed by the attached IndexingWorker's
 type TypedIngester struct {
-	bulkIngester *BulkIngester
-	DocumentType string
-	Data         chan *IngestRequest
-	Workers      map[int]*IndexingWorker
-	maxWorkers   int
+	bulkIngester     *BulkIngester
+	DocumentType     string
+	Data             chan *IngestRequest
+	Workers          map[int]*IndexingWorker
+	maxWorkers       int
+	metricQueryGauge metrics.Gauge
 }
+
+var (
+	metricTypedIngesterQueueGauge = prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
+		Namespace:   config.MetricNamespace,
+		ConstLabels: config.MetricPrometheusLabels,
+		Name:        "typedingester_queue",
+		Help:        "this is the help string for typedingester_queue",
+	}, []string{"app", "typedingester"}).
+		With("app", "qssla")
+)
 
 // NewTypedIngester returns a pointer to a new TypedIngester instance
 func NewTypedIngester(bulkIngester *BulkIngester, documentType string) *TypedIngester {
-	ingester := TypedIngester{}
-	ingester.bulkIngester = bulkIngester
-	ingester.DocumentType = documentType
-	ingester.Data = make(chan *IngestRequest)
-	ingester.Workers = make(map[int]*IndexingWorker)
-	ingester.maxWorkers = viper.GetInt("INGESTER_MAXIMUM_WORKERS")
+
+	ingester := TypedIngester{
+		bulkIngester:     bulkIngester,
+		DocumentType:     documentType,
+		Data:             make(chan *IngestRequest, viper.GetInt("TYPEDINGESTER_QUEUE_BUFFER_SIZE")),
+		Workers:          make(map[int]*IndexingWorker),
+		maxWorkers:       viper.GetInt("INGESTER_MAXIMUM_WORKERS"),
+		metricQueryGauge: metricTypedIngesterQueueGauge.With("typedingester", documentType),
+	}
 	for i := 0; i < ingester.maxWorkers; i++ {
 		worker := NewIndexingWorker(&ingester, i)
+		worker.metricQueryGauge.Set(0)
 		ingester.Workers[i] = worker
 		go worker.Run()
 		time.Sleep(10 * time.Millisecond) // goroutine warm-up
@@ -56,67 +74,19 @@ func NewTypedIngester(bulkIngester *BulkIngester, documentType string) *TypedIng
 // * One or multiple update command are sent to the dedicated indexer
 //
 func (ingester *TypedIngester) Run() {
-	zap.L().Info("Starting TypedIngester",
-		zap.String("documentType", ingester.DocumentType),
-	)
+	zap.L().Info("Starting TypedIngester", zap.String("documentType", ingester.DocumentType))
 
-	for {
-		select {
-		case ir := <-ingester.Data:
-			zap.L().Debug("Receive IngestRequest",
-				zap.String("IngesterType", ingester.DocumentType),
-				zap.Any("IngestRequest", ir),
-			)
+	for ir := range ingester.Data {
+		zap.L().Debug("Receive IngestRequest", zap.String("IngesterType", ingester.DocumentType), zap.Any("IngestRequest", ir))
 
-			switch ir.MergeConfig.Mode {
-			case merge.Self:
-				if ir.DocumentType == "budget" {
-					source := ir.Doc.Source.(map[string]interface{})
-					ingester.bulkIngester.Cache.AddToSlice(source["project-id"].(string), ir.Doc.ID)
-					ingester.bulkIngester.Cache.Dump()
-				}
-				fallthrough //!\\ Keep this
+		workerID := getWorker(ir.Doc.ID, ingester.maxWorkers)
+		worker := ingester.Workers[workerID]
+		updateCommand := NewUpdateCommand(ir.Doc.ID, ir.DocumentType, ir.Doc, ir.MergeConfig)
+		zap.L().Debug("Send UpdateCommand", zap.String("IngesterType", ingester.DocumentType), zap.Int("WorkerID", workerID), zap.Any("updateCommand", updateCommand), zap.Any("len(chan)", len(ingester.Workers[workerID].Data)))
 
-			case merge.EnrichFrom:
-				workerID := getWorker(ir.Doc.ID, ingester.maxWorkers)
-				updateCommand := NewUpdateCommand(ir.Doc.ID, ir.DocumentType, ir.Doc, ir.MergeConfig)
-				zap.L().Debug("Send UpdateCommand",
-					zap.String("IngesterType", ingester.DocumentType),
-					zap.Int("WorkerID", workerID),
-					zap.Any("updateCommand", updateCommand),
-				)
-				ingester.Workers[workerID].Data <- updateCommand
+		worker.Data <- updateCommand
 
-			case merge.EnrichTo:
-				// Request In-memory cache (native go map, Redis, etc.)
-				// TODO: Configurable and selectable cache for multiple "relations" types (stored in a map)
-				cachedData, found := ingester.bulkIngester.Cache.Get(ir.Doc.ID)
-				if found {
-					ids := cachedData.([]interface{})
-					for _, id := range ids {
-						workerID := getWorker(id.(string), ingester.maxWorkers)
-						updateCommand := NewUpdateCommand(id.(string), ir.MergeConfig.Type, ir.Doc, ir.MergeConfig)
-						zap.L().Debug("Send UpdateCommand",
-							zap.String("IngesterType", ingester.DocumentType),
-							zap.Int("WorkerID", workerID),
-							zap.Any("updateCommand", updateCommand),
-						)
-						ingester.Workers[workerID].Data <- updateCommand
-					}
-				} else {
-					zap.L().Debug("No cache data found, request skipped",
-						zap.String("IngesterType", ingester.DocumentType),
-						zap.String("key", ir.Doc.ID),
-					)
-				}
-
-			default:
-				zap.L().Error("Unknown merge mode",
-					zap.String("IngesterType", ingester.DocumentType),
-					zap.String("mode", ir.MergeConfig.Mode.String()),
-				)
-			}
-		}
+		ingester.metricQueryGauge.Set(float64(len(ingester.Data)))
 	}
 }
 

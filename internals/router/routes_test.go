@@ -5,7 +5,7 @@ import (
 	"net/http/httptest"
 	"testing"
 
-	"github.com/myrteametrics/myrtea-ingester-api/v4/internals/handlers"
+	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/handlers"
 )
 
 func TestHandlerIsAlive(t *testing.T) {
