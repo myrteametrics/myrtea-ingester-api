@@ -9,8 +9,8 @@ import (
 	"syscall"
 	"time"
 
-	config "github.com/myrteametrics/myrtea-ingester-api/v4/internals/configuration"
-	"github.com/myrteametrics/myrtea-ingester-api/v4/internals/router"
+	config "github.com/myrteametrics/myrtea-ingester-api/v5/internals/configuration"
+	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/router"
 	"github.com/myrteametrics/myrtea-sdk/v4/configuration"
 	"github.com/myrteametrics/myrtea-sdk/v4/elasticsearch"
 	"github.com/myrteametrics/myrtea-sdk/v4/metrics"
@@ -38,6 +38,9 @@ var (
 // @host localhost:9001
 // @BasePath /api/v1
 func main() {
+
+	hostname, _ := os.Hostname()
+	config.InitMetricLabels(hostname)
 
 	zapConfig := zap.NewDevelopmentConfig()
 	zapConfig.Level.SetLevel(zap.InfoLevel)

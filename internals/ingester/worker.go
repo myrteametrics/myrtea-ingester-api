@@ -3,40 +3,63 @@ package ingester
 import (
 	"context"
 	"fmt"
+	"strconv"
 	"strings"
 	"time"
 
+	"github.com/go-kit/kit/metrics"
+	"github.com/go-kit/kit/metrics/prometheus"
 	jsoniter "github.com/json-iterator/go"
-	"github.com/myrteametrics/myrtea-ingester-api/v4/internals/merge"
+	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/merge"
 	"github.com/myrteametrics/myrtea-sdk/v4/elasticsearch"
 	"github.com/myrteametrics/myrtea-sdk/v4/index"
 	"github.com/myrteametrics/myrtea-sdk/v4/models"
+	stdprometheus "github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
 
 // IndexingWorker is the unit of processing which can be started in parallel for elasticsearch ingestion
 type IndexingWorker struct {
-	TypedIngester *TypedIngester
-	ID            int
-	Data          chan *UpdateCommand
-	Client        *elasticsearch.EsExecutor
+	TypedIngester    *TypedIngester
+	ID               int
+	Data             chan *UpdateCommand
+	Client           *elasticsearch.EsExecutor
+	metricQueryGauge metrics.Gauge
 }
+
+var (
+	metricWorkerQueueGauge = prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
+		Namespace: "myrtea",
+		Name:      "worker_queue",
+		Help:      "this is the help string for worker_queue",
+	}, []string{"app", "component", "typedingester", "workerid"}).
+		With("app", "qssla", "component", "ingester")
+)
 
 // NewIndexingWorker returns a new IndexingWorker
 func NewIndexingWorker(typedIngester *TypedIngester, id int) *IndexingWorker {
-	worker := IndexingWorker{TypedIngester: typedIngester, ID: id}
-	worker.Data = make(chan *UpdateCommand)
+
+	data := make(chan *UpdateCommand, viper.GetInt("WORKER_QUEUE_BUFFER_SIZE"))
 
 	zap.L().Info("Initialize Elasticsearch client", zap.String("status", "in_progress"))
-	var err error
-	worker.Client, err = elasticsearch.NewEsExecutor(context.Background(), viper.GetStringSlice("ELASTICSEARCH_URLS"))
+	client, err := elasticsearch.NewEsExecutor(context.Background(), viper.GetStringSlice("ELASTICSEARCH_URLS"))
 	if err != nil {
 		zap.L().Error("Elasticsearch client initialization", zap.Error(err))
 	} else {
 		zap.L().Info("Initialize Elasticsearch client", zap.String("status", "done"))
 	}
-	return &worker
+
+	worker := &IndexingWorker{
+		TypedIngester:    typedIngester,
+		ID:               id,
+		Data:             data,
+		Client:           client,
+		metricQueryGauge: metricWorkerQueueGauge.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+	}
+	worker.metricQueryGauge.Set(0)
+
+	return worker
 }
 
 // Run start a worker
@@ -45,6 +68,17 @@ func (worker *IndexingWorker) Run() {
 		zap.String("TypedIngester", worker.TypedIngester.DocumentType),
 		zap.Int("WorkerID", worker.ID),
 	)
+
+	// Throttle testing only
+	// for {
+	// 	select {
+	// 	case uc := <-worker.Data:
+	// 		// zap.L().Info("Receive UpdateCommand", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Any("UpdateCommand", uc))
+	// 		_ = uc
+	// 		worker.metricQueryGauge.Set(float64(len(worker.Data)))
+	// 		time.Sleep(time.Millisecond * 1000)
+	// 	}
+	// }
 
 	bufferLength := viper.GetInt("WORKER_MAXIMUM_BUFFER_SIZE")
 	buffer := make([]*UpdateCommand, 0)
@@ -57,11 +91,9 @@ func (worker *IndexingWorker) Run() {
 
 		// Send indexing bulk (when buffer is full or on timeout)
 		case <-forceFlush:
-			zap.L().Debug("Try on after timeout reached", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
-				zap.Int("WorkerID", worker.ID), zap.Int("Timeout", forceFlushTimeout))
+			zap.L().Debug("Try on after timeout reached", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Timeout", forceFlushTimeout))
 			if len(buffer) > 0 {
-				zap.L().Info("Flushing on timeout reached", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
-					zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("Timeout", forceFlushTimeout))
+				zap.L().Info("Flushing on timeout reached", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("Timeout", forceFlushTimeout))
 				worker.flushEsBuffer(buffer)
 				buffer = buffer[:0]
 			}
@@ -69,17 +101,15 @@ func (worker *IndexingWorker) Run() {
 
 		// Build indexing bulk
 		case uc := <-worker.Data:
-			zap.L().Debug("Receive UpdateCommand", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
-				zap.Int("WorkerID", worker.ID), zap.Any("UpdateCommand", uc))
+			zap.L().Debug("Receive UpdateCommand", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Any("UpdateCommand", uc))
 			buffer = append(buffer, uc)
-
 			if len(buffer) >= bufferLength {
-				zap.L().Info("Try flushing on full buffer", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
-					zap.Int("WorkerID", worker.ID), zap.Int("Messages", bufferLength))
+				zap.L().Info("Try flushing on full buffer", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Messages", bufferLength))
 				worker.flushEsBuffer(buffer)
 				buffer = buffer[:0]
 				forceFlush = worker.resetForceFlush(forceFlushTimeout)
 			}
+			worker.metricQueryGauge.Set(float64(len(worker.Data)))
 		}
 	}
 }
