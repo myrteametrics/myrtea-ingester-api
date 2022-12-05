@@ -21,19 +21,26 @@ import (
 
 // IndexingWorker is the unit of processing which can be started in parallel for elasticsearch ingestion
 type IndexingWorker struct {
-	TypedIngester    *TypedIngester
-	ID               int
-	Data             chan *UpdateCommand
-	Client           *elasticsearch.EsExecutor
-	metricQueryGauge metrics.Gauge
+	TypedIngester          *TypedIngester
+	ID                     int
+	Data                   chan *UpdateCommand
+	Client                 *elasticsearch.EsExecutor
+	metricWorkerQueueGauge metrics.Gauge
+	metricWorkerMessage    metrics.Counter
 }
 
 var (
-	metricWorkerQueueGauge = prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
+	_metricWorkerQueueGauge = prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
 		Namespace: "myrtea",
 		Name:      "worker_queue",
 		Help:      "this is the help string for worker_queue",
 	}, []string{"app", "component", "typedingester", "workerid"}).
+		With("app", "qssla", "component", "ingester")
+	_metricWorkerMessage = prometheus.NewCounterFrom(stdprometheus.CounterOpts{
+		Namespace: "myrtea",
+		Name:      "worker_message_published",
+		Help:      "this is the help string for worker_message_published",
+	}, []string{"app", "component", "typedingester", "workerid", "status"}).
 		With("app", "qssla", "component", "ingester")
 )
 
@@ -51,13 +58,15 @@ func NewIndexingWorker(typedIngester *TypedIngester, id int) *IndexingWorker {
 	}
 
 	worker := &IndexingWorker{
-		TypedIngester:    typedIngester,
-		ID:               id,
-		Data:             data,
-		Client:           client,
-		metricQueryGauge: metricWorkerQueueGauge.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		TypedIngester:          typedIngester,
+		ID:                     id,
+		Data:                   data,
+		Client:                 client,
+		metricWorkerQueueGauge: _metricWorkerQueueGauge.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerMessage:    _metricWorkerMessage.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
 	}
-	worker.metricQueryGauge.Set(0)
+	worker.metricWorkerQueueGauge.Set(0)
+	worker.metricWorkerMessage.With("status", "flushed").Add(0)
 
 	return worker
 }
@@ -75,7 +84,7 @@ func (worker *IndexingWorker) Run() {
 	// 	case uc := <-worker.Data:
 	// 		// zap.L().Info("Receive UpdateCommand", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Any("UpdateCommand", uc))
 	// 		_ = uc
-	// 		worker.metricQueryGauge.Set(float64(len(worker.Data)))
+	// 		worker.metricWorkerQueueGauge.Set(float64(len(worker.Data)))
 	// 		time.Sleep(time.Millisecond * 1000)
 	// 	}
 	// }
@@ -109,7 +118,7 @@ func (worker *IndexingWorker) Run() {
 				buffer = buffer[:0]
 				forceFlush = worker.resetForceFlush(forceFlushTimeout)
 			}
-			worker.metricQueryGauge.Set(float64(len(worker.Data)))
+			worker.metricWorkerQueueGauge.Set(float64(len(worker.Data)))
 		}
 	}
 }
@@ -146,6 +155,8 @@ func (worker *IndexingWorker) flushEsBuffer(buffer []*UpdateCommand) {
 		return
 	}
 	worker.BulkChainedUpdate(sl)
+
+	worker.metricWorkerMessage.With("status", "flushed").Add(float64(len(buffer)))
 }
 
 // BulkChainedUpdate process multiple groups of UpdateCommand

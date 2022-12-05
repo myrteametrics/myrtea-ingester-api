@@ -22,16 +22,16 @@ import (
 // TypedIngester is a component which process IngestRequest
 // It generates UpdateCommand which are processed by the attached IndexingWorker's
 type TypedIngester struct {
-	bulkIngester     *BulkIngester
-	DocumentType     string
-	Data             chan *IngestRequest
-	Workers          map[int]*IndexingWorker
-	maxWorkers       int
-	metricQueryGauge metrics.Gauge
+	bulkIngester                  *BulkIngester
+	DocumentType                  string
+	Data                          chan *IngestRequest
+	Workers                       map[int]*IndexingWorker
+	maxWorkers                    int
+	metricTypedIngesterQueueGauge metrics.Gauge
 }
 
 var (
-	metricTypedIngesterQueueGauge = prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
+	_metricTypedIngesterQueueGauge = prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
 		Namespace:   config.MetricNamespace,
 		ConstLabels: config.MetricPrometheusLabels,
 		Name:        "typedingester_queue",
@@ -44,16 +44,17 @@ var (
 func NewTypedIngester(bulkIngester *BulkIngester, documentType string) *TypedIngester {
 
 	ingester := TypedIngester{
-		bulkIngester:     bulkIngester,
-		DocumentType:     documentType,
-		Data:             make(chan *IngestRequest, viper.GetInt("TYPEDINGESTER_QUEUE_BUFFER_SIZE")),
-		Workers:          make(map[int]*IndexingWorker),
-		maxWorkers:       viper.GetInt("INGESTER_MAXIMUM_WORKERS"),
-		metricQueryGauge: metricTypedIngesterQueueGauge.With("typedingester", documentType),
+		bulkIngester:                  bulkIngester,
+		DocumentType:                  documentType,
+		Data:                          make(chan *IngestRequest, viper.GetInt("TYPEDINGESTER_QUEUE_BUFFER_SIZE")),
+		Workers:                       make(map[int]*IndexingWorker),
+		maxWorkers:                    viper.GetInt("INGESTER_MAXIMUM_WORKERS"),
+		metricTypedIngesterQueueGauge: _metricTypedIngesterQueueGauge.With("typedingester", documentType),
 	}
+	_metricTypedIngesterQueueGauge.With("typedingester", documentType).Set(0)
+
 	for i := 0; i < ingester.maxWorkers; i++ {
 		worker := NewIndexingWorker(&ingester, i)
-		worker.metricQueryGauge.Set(0)
 		ingester.Workers[i] = worker
 		go worker.Run()
 		time.Sleep(10 * time.Millisecond) // goroutine warm-up
@@ -86,7 +87,7 @@ func (ingester *TypedIngester) Run() {
 
 		worker.Data <- updateCommand
 
-		ingester.metricQueryGauge.Set(float64(len(ingester.Data)))
+		ingester.metricTypedIngesterQueueGauge.Set(float64(len(ingester.Data)))
 	}
 }
 
