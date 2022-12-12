@@ -47,6 +47,7 @@ var (
 		Namespace: "myrtea",
 		Name:      "worker_flush_duration_seconds",
 		Help:      "this is the help string for worker_flush_duration_seconds",
+		Buckets:   []float64{1, 2.5, 5, 10, 20, 30, 60, 120, 300, 600},
 	}, []string{"typedingester", "workerid"})
 )
 
@@ -262,7 +263,7 @@ func (worker *IndexingWorker) multiGetFindRefDocs(index string, queries []GetQue
 		d = append(d, models.NewDocument(doc.ID, index, "document", nil))
 	}
 
-	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
 	response, err := worker.Client.MultiGet(ctx, d)
