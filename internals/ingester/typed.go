@@ -36,8 +36,7 @@ var (
 		ConstLabels: config.MetricPrometheusLabels,
 		Name:        "typedingester_queue",
 		Help:        "this is the help string for typedingester_queue",
-	}, []string{"app", "typedingester"}).
-		With("app", "qssla")
+	}, []string{"typedingester"})
 )
 
 // NewTypedIngester returns a pointer to a new TypedIngester instance

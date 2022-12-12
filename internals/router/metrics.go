@@ -12,10 +12,6 @@ import (
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
 )
 
-var (
-	dflBuckets = []float64{0.300, 1.200, 5.000}
-)
-
 // MetricMiddleware is a handler that exposes prometheus metrics for the number of requests,
 // the latency and the response size, partitioned by status code, method and HTTP path.
 type MetricMiddleware struct {
@@ -37,7 +33,7 @@ func NewMetricMiddleware(name string, buckets ...float64) func(next http.Handler
 	)
 
 	if len(buckets) == 0 {
-		buckets = dflBuckets
+		buckets = stdprometheus.DefBuckets
 	}
 	m.latency = prometheus.NewHistogramFrom(
 		stdprometheus.HistogramOpts{
@@ -45,7 +41,7 @@ func NewMetricMiddleware(name string, buckets ...float64) func(next http.Handler
 			ConstLabels: config.MetricPrometheusLabels,
 			Name:        "router_request_duration_seconds",
 			Help:        "How long it took to process the request, partitioned by status code, method and HTTP path.",
-			// Buckets:     buckets,
+			Buckets:     buckets,
 		}, []string{"code", "method", "path"},
 	)
 

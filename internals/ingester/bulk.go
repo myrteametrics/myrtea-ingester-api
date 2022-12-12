@@ -53,6 +53,10 @@ func (ingester *BulkIngester) Ingest(bir BulkIngestRequest) error {
 
 	if len(typedIngester.Data)+len(bir.Docs) >= cap(typedIngester.Data) {
 		zap.L().Debug("Buffered channel would be overloaded with incoming bulkIngestRequest")
+		typedIngester.metricTypedIngesterQueueGauge.Set(float64(len(typedIngester.Data)))
+		for _, worker := range typedIngester.Workers {
+			worker.metricWorkerQueueGauge.Set(float64(len(worker.Data)))
+		}
 		return errors.New("channel overload") // Replace with custom error
 	}
 

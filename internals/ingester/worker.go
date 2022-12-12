@@ -2,6 +2,7 @@ package ingester
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"strconv"
 	"strings"
@@ -14,6 +15,7 @@ import (
 	"github.com/myrteametrics/myrtea-sdk/v4/elasticsearch"
 	"github.com/myrteametrics/myrtea-sdk/v4/index"
 	"github.com/myrteametrics/myrtea-sdk/v4/models"
+	"github.com/olivere/elastic"
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
@@ -21,12 +23,13 @@ import (
 
 // IndexingWorker is the unit of processing which can be started in parallel for elasticsearch ingestion
 type IndexingWorker struct {
-	TypedIngester          *TypedIngester
-	ID                     int
-	Data                   chan *UpdateCommand
-	Client                 *elasticsearch.EsExecutor
-	metricWorkerQueueGauge metrics.Gauge
-	metricWorkerMessage    metrics.Counter
+	TypedIngester             *TypedIngester
+	ID                        int
+	Data                      chan *UpdateCommand
+	Client                    *elasticsearch.EsExecutor
+	metricWorkerQueueGauge    metrics.Gauge
+	metricWorkerMessage       metrics.Counter
+	metricWorkerFlushDuration metrics.Histogram
 }
 
 var (
@@ -34,14 +37,17 @@ var (
 		Namespace: "myrtea",
 		Name:      "worker_queue",
 		Help:      "this is the help string for worker_queue",
-	}, []string{"app", "component", "typedingester", "workerid"}).
-		With("app", "qssla", "component", "ingester")
+	}, []string{"typedingester", "workerid"})
 	_metricWorkerMessage = prometheus.NewCounterFrom(stdprometheus.CounterOpts{
 		Namespace: "myrtea",
 		Name:      "worker_message_published",
 		Help:      "this is the help string for worker_message_published",
-	}, []string{"app", "component", "typedingester", "workerid", "status"}).
-		With("app", "qssla", "component", "ingester")
+	}, []string{"typedingester", "workerid", "status"})
+	_metricWorkerFlushDuration = prometheus.NewHistogramFrom(stdprometheus.HistogramOpts{
+		Namespace: "myrtea",
+		Name:      "worker_flush_duration_seconds",
+		Help:      "this is the help string for worker_flush_duration_seconds",
+	}, []string{"typedingester", "workerid"})
 )
 
 // NewIndexingWorker returns a new IndexingWorker
@@ -58,12 +64,13 @@ func NewIndexingWorker(typedIngester *TypedIngester, id int) *IndexingWorker {
 	}
 
 	worker := &IndexingWorker{
-		TypedIngester:          typedIngester,
-		ID:                     id,
-		Data:                   data,
-		Client:                 client,
-		metricWorkerQueueGauge: _metricWorkerQueueGauge.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerMessage:    _metricWorkerMessage.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		TypedIngester:             typedIngester,
+		ID:                        id,
+		Data:                      data,
+		Client:                    client,
+		metricWorkerQueueGauge:    _metricWorkerQueueGauge.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerMessage:       _metricWorkerMessage.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerFlushDuration: _metricWorkerFlushDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
 	}
 	worker.metricWorkerQueueGauge.Set(0)
 	worker.metricWorkerMessage.With("status", "flushed").Add(0)
@@ -132,6 +139,8 @@ func (worker *IndexingWorker) flushEsBuffer(buffer []*UpdateCommand) {
 		return
 	}
 
+	start := time.Now()
+
 	m := make(map[string][]*UpdateCommand)
 	for _, uc := range buffer {
 		if m[uc.DocumentID] != nil {
@@ -157,77 +166,74 @@ func (worker *IndexingWorker) flushEsBuffer(buffer []*UpdateCommand) {
 	worker.BulkChainedUpdate(sl)
 
 	worker.metricWorkerMessage.With("status", "flushed").Add(float64(len(buffer)))
+	worker.metricWorkerFlushDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
 }
 
 // BulkChainedUpdate process multiple groups of UpdateCommand
 // It execute sequentialy every single UpdateCommand on a specific "source" document, for each group of commands
 func (worker *IndexingWorker) BulkChainedUpdate(documents [][]*UpdateCommand) {
 
-	zap.L().Debug("BulkChainUpdate",
-		zap.String("TypedIngester", worker.TypedIngester.DocumentType),
-		zap.Int("WorkerID", worker.ID),
-		zap.Any("documents", documents),
-	)
+	zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Any("documents", documents))
 
 	docs := make([]GetQuery, 0)
-	secondary := make([]GetQuery, 0)
-	secondaryM := make(map[string]bool, 0) // Alternative to Set[struct{}] assertion...
 	for _, commands := range documents {
 		docs = append(docs, GetQuery{DocumentType: commands[0].DocumentType, ID: commands[0].DocumentID})
-		for _, command := range commands {
-			if command.MergeConfig.Mode == merge.EnrichFrom {
-				key := command.MergeConfig.LinkKey
-				source := command.NewDoc.Source.(map[string]interface{})
-
-				mapKey := command.MergeConfig.Type + "#" + source[key].(string)
-				if !secondaryM[mapKey] {
-					secondary = append(secondary, GetQuery{DocumentType: command.MergeConfig.Type, ID: source[key].(string)})
-					secondaryM[mapKey] = true
-				}
-			}
-		}
+	}
+	if len(docs) == 0 {
+		zap.L().Warn("empty docs update", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID))
+		return
 	}
 
-	zap.L().Debug("Main Call",
-		zap.String("TypedIngester", worker.TypedIngester.DocumentType),
-		zap.Int("WorkerID", worker.ID),
-		zap.Any("docs", docs),
-	)
-	// zap.L().Debug("Secondary Call",
-	// 	zap.String("TypedIngester", worker.TypedIngester.DocumentType),
-	// 	zap.Int("WorkerID", worker.ID),
-	// 	zap.Any("secondary", secondary),
-	// )
+	indices, err := worker.getIndices(docs[0].DocumentType)
+	if err != nil {
+		// ?
+	}
 
-	// FIXME: replace with proper method and SDK Depth
-	alias := buildAliasName(docs[0].DocumentType, index.Patch)
-	indices, err := worker.Client.GetIndicesByAlias(context.Background(), alias)
+	refDocs, err := worker.multiGetFindRefDocsFull(indices, docs)
+	if err != nil {
+		// ?
+	}
+
+	push, err := worker.applyMerges(documents, refDocs)
+	if err != nil {
+		// ?
+	}
+
+	err = worker.bulkIndex(push)
+	if err != nil {
+		// ?
+	}
+}
+
+func (worker *IndexingWorker) getIndices(documentType string) ([]string, error) {
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	defer cancel()
+
+	alias := buildAliasName(documentType, index.Patch)
+	indices, err := worker.Client.GetIndicesByAlias(ctx, alias)
 	if err != nil {
 		zap.L().Error("GetIndicesByAlias", zap.Error(err), zap.String("alias", alias))
 	}
+	return indices, err
+}
 
+func (worker *IndexingWorker) multiGetFindRefDocsFull(indices []string, docs []GetQuery) ([]*models.Document, error) {
 	// TODO: parrallelism of multiple bulk get ?
 	// Or chain GET on missing results only (instead of full set)
 	refDocs := make([]*models.Document, 0)
 	for _, index := range indices {
 
-		d := make([]*models.Document, 0)
-		for _, doc := range docs {
-			d = append(d, models.NewDocument(doc.ID, index, "document", nil))
+		responseDocs, err := worker.multiGetFindRefDocs(index, docs)
+		if err != nil {
+			// what to do ?
 		}
-		response, err := worker.Client.MultiGet(context.Background(), d)
 
-		zap.L().Debug("MULTIGET", zap.Any("d", d), zap.Any("response", response))
-
-		if err != nil || response.Docs == nil || len(response.Docs) == 0 {
-			zap.L().Error("MultiGet (self)", zap.Error(err))
-			continue
-		}
-		for i, d := range response.Docs {
+		for i, d := range responseDocs {
 			data, err := jsoniter.Marshal(d.Source)
 			if err != nil {
 				zap.L().Error("UPDATE MULTIGET unmarshal", zap.Error(err))
 			}
+
 			var source map[string]interface{}
 			err = jsoniter.Unmarshal(data, &source)
 			if err != nil {
@@ -247,67 +253,31 @@ func (worker *IndexingWorker) BulkChainedUpdate(documents [][]*UpdateCommand) {
 			}
 		}
 	}
+	return refDocs, nil
+}
 
-	// TODO: Replace code in executor instead of dirty conversion
-	s := make([]*models.Document, 0)
-	for _, sec := range secondary {
-		s = append(s, sec.convertToExecutor())
-	}
-	// END TODO: Replace code in executor instead of dirty conversion
-
-	// TODO: Replace by an in-memory cache ?
-	var enrichDocs = make([]*models.Document, 0)
-	if len(s) > 0 {
-		// TODO: Replace by in-memory cache OR MultiSearch()
-		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-		defer cancel()
-		response2, err := worker.Client.MultiGet(ctx, s)
-		if err != nil {
-			zap.L().Error("MultiSearch (enrich_to)", zap.Error(err))
-		}
-		zap.L().Debug("response2", zap.Any("s", s), zap.Any("response2", response2))
-
-		for _, d := range response2.Docs {
-			if d.Found == false {
-				continue
-			}
-			data, err := jsoniter.Marshal(d.Source)
-			if err != nil {
-				zap.L().Error("UPDATE MULTIGET unmarshal", zap.Error(err))
-			}
-			var source map[string]interface{}
-			err = jsoniter.Unmarshal(data, &source)
-			if err != nil {
-				zap.L().Error("UPDATE MULTIGET unmarshal", zap.Error(err))
-			}
-			doc := models.NewDocument(d.Id, d.Index, d.Type, source)
-
-			zap.L().Debug("found", zap.Any("d", d), zap.Any("doc", doc))
-			enrichDocs = append(enrichDocs, doc)
-		}
+func (worker *IndexingWorker) multiGetFindRefDocs(index string, queries []GetQuery) ([]*elastic.GetResult, error) {
+	d := make([]*models.Document, 0)
+	for _, doc := range queries {
+		d = append(d, models.NewDocument(doc.ID, index, "document", nil))
 	}
 
+	ctx, cancel := context.WithTimeout(context.Background(), 1*time.Second)
+	defer cancel()
+
+	response, err := worker.Client.MultiGet(ctx, d)
+	if err != nil || response.Docs == nil || len(response.Docs) == 0 {
+		zap.L().Error("MultiGet (self)", zap.Error(err))
+		return make([]*elastic.GetResult, 0), err
+	}
+	return response.Docs, nil
+}
+
+func (worker *IndexingWorker) applyMerges(documents [][]*UpdateCommand, refDocs []*models.Document) ([]*models.Document, error) {
 	var push = make([]*models.Document, 0)
-
 	var i int
 	for _, commands := range documents {
 		var doc *models.Document
-		//if response.Responses[i] != nil && response.Responses[i].Hits != nil && len(response.Responses[i].Hits.Hits) > 0 {
-		//	d := response.Responses[i].Hits.Hits[0]
-		// if response.Docs != nil && len(response.Docs) > 0 && response.Docs[i] != nil {
-		// 	d := response.Docs[i]
-		// 	data, err := jsoniter.Marshal(d.Source)
-		// 	if err != nil {
-		// 		zap.L().Error("UPDATE MULTIGET unmarshal", zap.Error(err))
-		// 	}
-		// 	var source map[string]interface{}
-		// 	err = jsoniter.Unmarshal(data, &source)
-		// 	if err != nil {
-		// 		zap.L().Error("UPDATE MULTIGET unmarshal", zap.Error(err))
-		// 	}
-		// 	doc = models.NewDocument(d.Id, d.Index, d.Type, source)
-		// }
-
 		if len(refDocs) > i {
 			doc = refDocs[i]
 		}
@@ -317,50 +287,33 @@ func (worker *IndexingWorker) BulkChainedUpdate(documents [][]*UpdateCommand) {
 			if command.NewDoc.Index == "" {
 				command.NewDoc.Index = buildAliasName(command.DocumentType, index.Last)
 			}
-			doc = ApplyMerge(doc, command, enrichDocs)
+			doc = ApplyMergeLight(doc, command)
 		}
 		doc.IndexType = "document"
 		push = append(push, doc)
 		i++ // synchronise map iteration with reponse.Docs
 	}
-
-	zap.L().Debug("Final document output",
-		zap.String("TypedIngester", worker.TypedIngester.DocumentType),
-		zap.Int("WorkerID", worker.ID),
-		zap.Any("PushDocs", push),
-	)
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Minute)
-	defer cancel()
-	bulkResponse, err := worker.Client.BulkIndex(ctx, push)
-	if err != nil {
-		zap.L().Error("BulkIndex response",
-			zap.String("TypedIngester", worker.TypedIngester.DocumentType),
-			zap.Int("WorkerID", worker.ID),
-			zap.Any("documents", documents),
-			zap.Error(err))
-		return
-	}
-	if bulkResponse != nil && len(bulkResponse.Failed()) > 0 {
-		zap.L().Error("Error during bulkIndex",
-			zap.String("TypedIngester", worker.TypedIngester.DocumentType),
-			zap.Int("WorkerID", worker.ID),
-			zap.Any("documents", documents),
-			zap.Any("bulkResponse.Failed()", bulkResponse.Failed()))
-	}
-	zap.L().Debug("BulkIndex response", zap.Any("bulkResponse", bulkResponse))
-	//return bulkResponse, err
+	return push, nil
 }
 
-// ApplyMerge execute a merge based on a specific UpdateCommand
-func ApplyMerge(doc *models.Document, command *UpdateCommand, secondary []*models.Document) *models.Document {
-	// Important : "doc" is always the output document
+func (worker *IndexingWorker) bulkIndex(docs []*models.Document) error {
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
 
-	zap.L().Debug("ApplyMerge",
-		zap.String("mergeMode", command.MergeConfig.Mode.String()),
-		zap.Any("doc", doc),
-		zap.Any("command", command),
-		zap.Any("secondary", secondary),
-	)
+	bulkResponse, err := worker.Client.BulkIndex(ctx, docs)
+	if err != nil {
+		zap.L().Error("BulkIndex response", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Error(err))
+		return err
+	}
+	if bulkResponse != nil && len(bulkResponse.Failed()) > 0 {
+		zap.L().Error("Error during bulkIndex", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Any("bulkResponse.Failed()", bulkResponse.Failed()))
+		return errors.New("bulkindex failed")
+	}
+	return nil
+}
+
+func ApplyMergeLight(doc *models.Document, command *UpdateCommand) *models.Document {
+	zap.L().Debug("ApplyMerge", zap.String("mergeMode", command.MergeConfig.Mode.String()), zap.Any("doc", doc), zap.Any("command", command))
 
 	switch command.MergeConfig.Mode {
 	case merge.Self:
@@ -369,32 +322,50 @@ func ApplyMerge(doc *models.Document, command *UpdateCommand, secondary []*model
 		output := command.MergeConfig.Apply(command.NewDoc, doc)
 		zap.L().Debug("ApplyMergeResult", zap.Any("output", output))
 		return output
-
-	case merge.EnrichFrom:
-		// COMMAND.NEWDOC enriched by SECONDARY[KEY] with config COMMAND.MERGECONFIG
-		for _, sec := range secondary {
-			if sec == nil {
-				continue
-			}
-			key := command.MergeConfig.LinkKey
-			source := command.NewDoc.Source.(map[string]interface{})
-			if sec.IndexType == command.MergeConfig.Type && sec.ID == source[key] {
-				command.MergeConfig.Apply(doc, sec)
-				break // TODO: what about multiple external document enriching a single one ?
-			}
-		}
-		zap.L().Debug("ApplyMergeResult", zap.Any("doc", doc))
-		return doc
-
-	case merge.EnrichTo:
-		// DOC enriched WITH COMMAND.NEWDOC (NO pointer swap !) with config COMMAND.MERGECONFIG
-		// The old existing document stay the reference (and is enriched with the data of a new one)
-		command.MergeConfig.Apply(doc, command.NewDoc)
-		zap.L().Debug("ApplyMergeResult", zap.Any("doc", doc))
-		return doc
+	default:
+		zap.L().Warn("mergeconfig mode not supported", zap.String("mode", command.MergeConfig.Mode.String()))
 	}
 	return nil
 }
+
+// // ApplyMerge execute a merge based on a specific UpdateCommand
+// func ApplyMerge(doc *models.Document, command *UpdateCommand, secondary []*models.Document) *models.Document {
+// 	// Important : "doc" is always the output document
+// 	zap.L().Debug("ApplyMerge", zap.String("mergeMode", command.MergeConfig.Mode.String()), zap.Any("doc", doc), zap.Any("command", command), zap.Any("secondary", secondary))
+
+// 	switch command.MergeConfig.Mode {
+// 	case merge.Self:
+// 		// COMMAND.NEWDOC enriched with DOC (pointer swap !) with config COMMAND.MERGECONFIG
+// 		// The new pushed document become the new "reference" (and is enriched by the data of an existing one)
+// 		output := command.MergeConfig.Apply(command.NewDoc, doc)
+// 		zap.L().Debug("ApplyMergeResult", zap.Any("output", output))
+// 		return output
+
+// 	case merge.EnrichFrom:
+// 		// COMMAND.NEWDOC enriched by SECONDARY[KEY] with config COMMAND.MERGECONFIG
+// 		for _, sec := range secondary {
+// 			if sec == nil {
+// 				continue
+// 			}
+// 			key := command.MergeConfig.LinkKey
+// 			source := command.NewDoc.Source.(map[string]interface{})
+// 			if sec.IndexType == command.MergeConfig.Type && sec.ID == source[key] {
+// 				command.MergeConfig.Apply(doc, sec)
+// 				break // TODO: what about multiple external document enriching a single one ?
+// 			}
+// 		}
+// 		zap.L().Debug("ApplyMergeResult", zap.Any("doc", doc))
+// 		return doc
+
+// 	case merge.EnrichTo:
+// 		// DOC enriched WITH COMMAND.NEWDOC (NO pointer swap !) with config COMMAND.MERGECONFIG
+// 		// The old existing document stay the reference (and is enriched with the data of a new one)
+// 		command.MergeConfig.Apply(doc, command.NewDoc)
+// 		zap.L().Debug("ApplyMergeResult", zap.Any("doc", doc))
+// 		return doc
+// 	}
+// 	return nil
+// }
 
 // GetQuery ...
 type GetQuery struct {
@@ -408,10 +379,6 @@ func (getQuery *GetQuery) convertToExecutor() *models.Document {
 }
 
 func buildAliasName(documentType string, depth index.Depth) string {
-	access := fmt.Sprintf("%s-%s-%s",
-		viper.GetString("INSTANCE_NAME"),
-		documentType,
-		strings.ToLower(depth.String()),
-	)
+	access := fmt.Sprintf("%s-%s-%s", viper.GetString("INSTANCE_NAME"), documentType, strings.ToLower(depth.String()))
 	return access
 }

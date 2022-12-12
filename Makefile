@@ -80,14 +80,13 @@ test-unit:
 # test-memory:
 # 	GO111MODULE=$(GO111MODULE) GOSUMDB=$(GOSUMDB) go test -msan -short $$(go list ./... | grep -v /vendor/)
 
-$(GOLANGCILINT):
-	curl -sSfL https://raw.githubusercontent.com/golangci/golangci-lint/master/install.sh | sh -s -- -b $(go env GOPATH)/bin v1.30.0
+$(lint):
+	go install github.com/golangci/golangci-lint/cmd/golangci-lint@latest
 
 .PHONY: lint ## Lint the code
-lint:
-	golint -set_exit_status=true $$(go list ./... | grep github.com/myrteametrics/myrtea-ingester-api/v5)
-# lint: $(GOLANGCILINT)
-# 	golangci-lint run
+lint: $(lint)
+	go mod tidy
+	golangci-lint run
 
 $(SWAG):
 	go get github.com/swaggo/swag/cmd/swag@v1.5.1
