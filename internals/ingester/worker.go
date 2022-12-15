@@ -54,7 +54,12 @@ var (
 // NewIndexingWorker returns a new IndexingWorker
 func NewIndexingWorker(typedIngester *TypedIngester, id int) *IndexingWorker {
 
-	data := make(chan *UpdateCommand, viper.GetInt("WORKER_QUEUE_BUFFER_SIZE"))
+	var data chan *UpdateCommand
+	if workerQueueSize := viper.GetInt("WORKER_QUEUE_BUFFER_SIZE"); workerQueueSize > 0 {
+		data = make(chan *UpdateCommand, viper.GetInt("WORKER_QUEUE_BUFFER_SIZE"))
+	} else {
+		data = make(chan *UpdateCommand)
+	}
 
 	zap.L().Info("Initialize Elasticsearch client", zap.String("status", "in_progress"))
 	client, err := elasticsearch.NewEsExecutor(context.Background(), viper.GetStringSlice("ELASTICSEARCH_URLS"))
