@@ -236,8 +236,8 @@ func TestMergeConfigReplaceIfMissing(t *testing.T) {
 
 func TestMergeConfigDateArithmeticWorkingDays(t *testing.T) {
 
-	// zapCfg := zap.NewDevelopmentConfig()
-	// logger, err := zapCfg.Build(zap.AddStacktrace(zap.ErrorLevel))
+	// zapConfig := zap.NewDevelopmentConfig()
+	// logger, err := zapConfig.Build(zap.AddStacktrace(zap.ErrorLevel))
 	// if err != nil {
 	// 	log.Fatalf("can't initialize zap logger: %v", err)
 	// }
@@ -334,8 +334,8 @@ func TestMergeConfigDateArithmeticWorkingDays(t *testing.T) {
 
 func TestMergeConfigArithmetic(t *testing.T) {
 
-	// zapCfg := zap.NewDevelopmentConfig()
-	// logger, err := zapCfg.Build(zap.AddStacktrace(zap.ErrorLevel))
+	// zapConfig := zap.NewDevelopmentConfig()
+	// logger, err := zapConfig.Build(zap.AddStacktrace(zap.ErrorLevel))
 	// if err != nil {
 	// 	log.Fatalf("can't initialize zap logger: %v", err)
 	// }

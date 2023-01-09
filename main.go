@@ -2,7 +2,6 @@ package main
 
 import (
 	"context"
-	"log"
 	"net/http"
 	"os"
 	"os/signal"
@@ -42,21 +41,7 @@ func main() {
 	hostname, _ := os.Hostname()
 	config.InitMetricLabels(hostname)
 
-	zapConfig := zap.NewDevelopmentConfig()
-	zapConfig.Level.SetLevel(zap.InfoLevel)
-
-	// zapConfig.Level.SetLevel(zap.DebugLevel)
-	// zapConfig.OutputPaths = []string{
-	// 	"stdout",
-	// 	"sql.log",
-	// }
-
-	logger, err := zapConfig.Build(zap.AddStacktrace(zap.ErrorLevel))
-	if err != nil {
-		log.Fatalf("can't initialize zap logger: %v", err)
-	}
-	defer logger.Sync()
-	zap.ReplaceGlobals(logger)
+	zapConfig := configuration.InitLogger(viper.GetBool("LOGGER_PRODUCTION"))
 
 	zap.L().Info("Starting Ingester-API...", zap.String("version", Version), zap.String("build_date", BuildDate))
 
