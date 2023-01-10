@@ -41,13 +41,10 @@ func main() {
 	hostname, _ := os.Hostname()
 	config.InitMetricLabels(hostname)
 
+	configuration.InitializeConfig(config.AllowedConfigKey, config.ConfigName, config.ConfigPath, config.EnvPrefix)
 	zapConfig := configuration.InitLogger(viper.GetBool("LOGGER_PRODUCTION"))
 
 	zap.L().Info("Starting Ingester-API...", zap.String("version", Version), zap.String("build_date", BuildDate))
-
-	zap.L().Info("Loading configurations...")
-	configuration.InitializeConfig(config.AllowedConfigKey, config.ConfigName, config.ConfigPath, config.EnvPrefix)
-	zap.L().Info("Loading configurations... Done")
 
 	zap.L().Info("Initialize Elasticsearch client...")
 	elasticsearch.ReplaceGlobals(&elasticsearch.Credentials{URLs: viper.GetStringSlice("ELASTICSEARCH_URLS")})
