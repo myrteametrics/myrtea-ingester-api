@@ -1,4 +1,4 @@
-package router
+package routes
 
 import (
 	"io"
@@ -14,7 +14,7 @@ func NotImplemented(w http.ResponseWriter, r *http.Request) {
 	io.WriteString(w, `{"message":"Not Implemented"}`)
 }
 
-func ingesterRouter() http.Handler {
+func IngesterRoutes() http.Handler {
 	r := chi.NewRouter()
 
 	ingesterAPI := handlers.NewIngesterHandler()

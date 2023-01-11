@@ -9,10 +9,10 @@ import (
 	"time"
 
 	config "github.com/myrteametrics/myrtea-ingester-api/v5/internals/configuration"
-	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/router"
+	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/routes"
 	"github.com/myrteametrics/myrtea-sdk/v4/configuration"
 	"github.com/myrteametrics/myrtea-sdk/v4/elasticsearch"
-	"github.com/myrteametrics/myrtea-sdk/v4/metrics"
+	"github.com/myrteametrics/myrtea-sdk/v4/router"
 	"github.com/myrteametrics/myrtea-sdk/v4/server"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
@@ -50,27 +50,27 @@ func main() {
 	elasticsearch.ReplaceGlobals(&elasticsearch.Credentials{URLs: viper.GetStringSlice("ELASTICSEARCH_URLS")})
 	zap.L().Info("Initialize Elasticsearch client... Done")
 
-	metrics.ReplaceGlobals(metrics.NewStatsDClient("127.0.0.1:8125", "dev-client"))
-
 	serverPort := viper.GetInt("SERVER_PORT")
 	serverEnableTLS := viper.GetBool("SERVER_ENABLE_TLS")
 	serverTLSCert := viper.GetString("SERVER_TLS_FILE_CRT")
 	serverTLSKey := viper.GetString("SERVER_TLS_FILE_KEY")
 
-	apiEnableCORS := viper.GetBool("API_ENABLE_CORS")
-	apiEnableSecurity := viper.GetBool("API_ENABLE_SECURITY")
-	apiEnableGatewayMode := viper.GetBool("API_ENABLE_GATEWAY_MODE")
-
-	if !apiEnableSecurity {
-		zap.L().Info("Warning: API starting in unsecured mode, be sure to set API_UNSECURED=false in production")
-	}
-	if apiEnableGatewayMode {
-		zap.L().Info("Server router will be started using API Gateway mode." +
-			"Please ensure every request has been properly pre-verified by the auth-api")
-	}
-
-	router := router.NewChiRouter(apiEnableSecurity, apiEnableCORS, apiEnableGatewayMode, zapConfig.Level)
-
+	router := router.NewChiRouterSimple(router.ConfigSimple{
+		Production:              viper.GetBool("LOGGER_PRODUCTION"),
+		Security:                viper.GetBool("API_ENABLE_SECURITY"),
+		CORS:                    viper.GetBool("API_ENABLE_CORS"),
+		GatewayMode:             viper.GetBool("API_ENABLE_GATEWAY_MODE"),
+		VerboseError:            false,
+		AuthenticationMode:      "BASIC",
+		LogLevel:                zapConfig.Level,
+		MetricsNamespace:        "myrtea",
+		MetricsPrometheusLabels: nil,
+		MetricsServiceName:      "",
+		PublicRoutes:            make(map[string]http.Handler),
+		ProtectedRoutes: map[string]http.Handler{
+			"/ingester": routes.IngesterRoutes(),
+		},
+	})
 	var srv *http.Server
 	if serverEnableTLS {
 		srv = server.NewSecuredServer(serverPort, serverTLSCert, serverTLSKey, router)
