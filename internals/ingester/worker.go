@@ -4,17 +4,20 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"log"
 	"strconv"
 	"strings"
 	"time"
 
 	"github.com/go-kit/kit/metrics"
 	"github.com/go-kit/kit/metrics/prometheus"
+	"github.com/hashicorp/go-retryablehttp"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/merge"
 	"github.com/myrteametrics/myrtea-sdk/v4/elasticsearch"
 	"github.com/myrteametrics/myrtea-sdk/v4/index"
 	"github.com/myrteametrics/myrtea-sdk/v4/models"
+	"github.com/myrteametrics/myrtea-sdk/v4/utils"
 	"github.com/olivere/elastic"
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/viper"
@@ -62,18 +65,47 @@ func NewIndexingWorker(typedIngester *TypedIngester, id int) *IndexingWorker {
 	}
 
 	zap.L().Info("Initialize Elasticsearch client", zap.String("status", "in_progress"))
-	client, err := elasticsearch.NewEsExecutor(context.Background(), viper.GetStringSlice("ELASTICSEARCH_URLS"))
+	// client, err := elasticsearch.NewEsExecutor(context.Background(), viper.GetStringSlice("ELASTICSEARCH_URLS"))
+	// if err != nil {
+	// 	zap.L().Error("Elasticsearch client initialization", zap.Error(err))
+	// } else {
+	// 	zap.L().Info("Initialize Elasticsearch client", zap.String("status", "done"))
+	// }
+
+	var zapDebugConfig zap.Config
+	if viper.GetBool("LOGGER_PRODUCTION") {
+		zapDebugConfig = zap.NewProductionConfig()
+	} else {
+		zapDebugConfig = zap.NewDevelopmentConfig()
+	}
+	zapDebugConfig.Level.SetLevel(zap.DebugLevel)
+	zapDebugLogger, err := zapDebugConfig.Build(zap.AddStacktrace(zap.PanicLevel))
+	if err != nil {
+		log.Fatalf("can't initialize zap logger: %v", err)
+	}
+	defer zapDebugLogger.Sync()
+
+	retryClient := retryablehttp.NewClient()
+	retryClient.HTTPClient.Timeout = viper.GetDuration("SINK_HTTP_TIMEOUT")
+	retryClient.Logger = utils.NewZapLeveledLogger(zapDebugLogger)
+
+	client, err := elastic.NewClient(elastic.SetSniff(false),
+		elastic.SetHealthcheckTimeoutStartup(60*time.Second),
+		elastic.SetURL(viper.GetStringSlice("ELASTICSEARCH_URLS")...),
+		elastic.SetHttpClient(retryClient.StandardClient()),
+	)
 	if err != nil {
 		zap.L().Error("Elasticsearch client initialization", zap.Error(err))
 	} else {
 		zap.L().Info("Initialize Elasticsearch client", zap.String("status", "done"))
 	}
+	executor := &elasticsearch.EsExecutor{Client: client}
 
 	worker := &IndexingWorker{
 		TypedIngester:             typedIngester,
 		ID:                        id,
 		Data:                      data,
-		Client:                    client,
+		Client:                    executor,
 		metricWorkerQueueGauge:    _metricWorkerQueueGauge.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
 		metricWorkerMessage:       _metricWorkerMessage.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
 		metricWorkerFlushDuration: _metricWorkerFlushDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
@@ -113,9 +145,9 @@ func (worker *IndexingWorker) Run() {
 
 		// Send indexing bulk (when buffer is full or on timeout)
 		case <-forceFlush:
-			zap.L().Debug("Try on after timeout reached", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Timeout", forceFlushTimeout))
+			zap.L().Info("Try on after timeout reached", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("workerLen", len(worker.Data)), zap.Int("Timeout", forceFlushTimeout))
 			if len(buffer) > 0 {
-				zap.L().Info("Flushing on timeout reached", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("Timeout", forceFlushTimeout))
+				zap.L().Info("Flushing on timeout reached", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("workerLen", len(worker.Data)), zap.Int("Timeout", forceFlushTimeout))
 				worker.flushEsBuffer(buffer)
 				buffer = buffer[:0]
 			}
@@ -126,7 +158,7 @@ func (worker *IndexingWorker) Run() {
 			zap.L().Debug("Receive UpdateCommand", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Any("UpdateCommand", uc))
 			buffer = append(buffer, uc)
 			if len(buffer) >= bufferLength {
-				zap.L().Info("Try flushing on full buffer", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Messages", bufferLength))
+				zap.L().Info("Try flushing on full buffer", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("workerLen", len(worker.Data)))
 				worker.flushEsBuffer(buffer)
 				buffer = buffer[:0]
 				forceFlush = worker.resetForceFlush(forceFlushTimeout)
@@ -179,7 +211,7 @@ func (worker *IndexingWorker) flushEsBuffer(buffer []*UpdateCommand) {
 // It execute sequentialy every single UpdateCommand on a specific "source" document, for each group of commands
 func (worker *IndexingWorker) BulkChainedUpdate(documents [][]*UpdateCommand) {
 
-	zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Any("documents", documents))
+	zap.L().Info("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "starting"))
 
 	docs := make([]GetQuery, 0)
 	for _, commands := range documents {
@@ -190,25 +222,31 @@ func (worker *IndexingWorker) BulkChainedUpdate(documents [][]*UpdateCommand) {
 		return
 	}
 
+	zap.L().Info("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "getindices"))
+
 	indices, err := worker.getIndices(docs[0].DocumentType)
 	if err != nil {
-		// ?
+		zap.L().Error("getIndices", zap.Error(err))
 	}
+	zap.L().Info("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "multiGetFindRefDocsFull"))
 
 	refDocs, err := worker.multiGetFindRefDocsFull(indices, docs)
 	if err != nil {
-		// ?
+		zap.L().Error("multiGetFindRefDocsFull", zap.Error(err))
 	}
+	zap.L().Info("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "bulkIndex"))
 
 	push, err := worker.applyMerges(documents, refDocs)
 	if err != nil {
-		// ?
+		zap.L().Error("applyMerges", zap.Error(err))
 	}
+	zap.L().Info("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
 
 	err = worker.bulkIndex(push)
 	if err != nil {
-		// ?
+		zap.L().Error("bulkIndex", zap.Error(err))
 	}
+	zap.L().Info("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "done"))
 }
 
 func (worker *IndexingWorker) getIndices(documentType string) ([]string, error) {
@@ -226,24 +264,27 @@ func (worker *IndexingWorker) getIndices(documentType string) ([]string, error) 
 func (worker *IndexingWorker) multiGetFindRefDocsFull(indices []string, docs []GetQuery) ([]*models.Document, error) {
 	// TODO: parrallelism of multiple bulk get ?
 	// Or chain GET on missing results only (instead of full set)
+	zap.L().Info("multiGetFindRefDocsFull", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "loop indices"))
 	refDocs := make([]*models.Document, 0)
 	for _, index := range indices {
 
+		zap.L().Info("multiGetFindRefDocsFull", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("index", index), zap.String("step", "index"))
 		responseDocs, err := worker.multiGetFindRefDocs(index, docs)
 		if err != nil {
-			// what to do ?
+			zap.L().Error("multiGetFindRefDocs", zap.Error(err))
 		}
+		zap.L().Info("multiGetFindRefDocsFull", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("index", index), zap.String("step", "loop docs"))
 
 		for i, d := range responseDocs {
 			data, err := jsoniter.Marshal(d.Source)
 			if err != nil {
-				zap.L().Error("UPDATE MULTIGET unmarshal", zap.Error(err))
+				zap.L().Error("update multiget unmarshal", zap.Error(err))
 			}
 
 			var source map[string]interface{}
 			err = jsoniter.Unmarshal(data, &source)
 			if err != nil {
-				zap.L().Error("UPDATE MULTIGET unmarshal", zap.Error(err))
+				zap.L().Error("update multiget unmarshal", zap.Error(err))
 			}
 
 			if len(refDocs) > i && refDocs[i] == nil {

@@ -7,6 +7,7 @@ require (
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-chi/jwtauth v3.3.0+incompatible // indirect
 	github.com/go-kit/kit v0.12.0
+	github.com/hashicorp/go-retryablehttp v0.7.2
 	github.com/json-iterator/go v1.1.12
 	github.com/myrteametrics/myrtea-sdk/v4 v4.1.11
 	github.com/olivere/elastic v6.2.16+incompatible

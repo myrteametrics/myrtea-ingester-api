@@ -51,7 +51,7 @@ func main() {
 	zap.L().Info("Initialize Elasticsearch client... Done")
 
 	serverPort := viper.GetInt("SERVER_PORT")
-	serverEnableTLS := viper.GetBool("SERVER_ENABLE_TLS")
+	serverSecured := viper.GetBool("SERVER_ENABLE_TLS")
 	serverTLSCert := viper.GetString("SERVER_TLS_FILE_CRT")
 	serverTLSKey := viper.GetString("SERVER_TLS_FILE_KEY")
 
@@ -72,7 +72,7 @@ func main() {
 		},
 	})
 	var srv *http.Server
-	if serverEnableTLS {
+	if serverSecured {
 		srv = server.NewSecuredServer(serverPort, serverTLSCert, serverTLSKey, router)
 	} else {
 		srv = server.NewUnsecuredServer(serverPort, router)
@@ -83,7 +83,7 @@ func main() {
 
 	go func() {
 		var err error
-		if serverEnableTLS {
+		if serverSecured {
 			err = srv.ListenAndServeTLS(serverTLSCert, serverTLSKey)
 		} else {
 			err = srv.ListenAndServe()
