@@ -7,15 +7,15 @@ import (
 
 // UpdateCommand wrap all infos required to update a document in elasticsearch
 type UpdateCommand struct {
-	DocumentID   string           `json:"documentId"`
-	DocumentType string           `json:"documentType"`
-	NewDoc       *models.Document `json:"doc"`
-	MergeConfig  *merge.Config    `json:"merge"`
-	Index        string           `json:"index"`
+	DocumentID   string          `json:"documentId"`
+	DocumentType string          `json:"documentType"`
+	NewDoc       models.Document `json:"doc"`
+	MergeConfig  merge.Config    `json:"merge"`
+	Index        string          `json:"index"`
 }
 
 // NewUpdateCommand returns a new UpdateCommand
-func NewUpdateCommand(index string, documentID string, documentType string, newDoc *models.Document, mergeConfig *merge.Config) *UpdateCommand {
+func NewUpdateCommand(index string, documentID string, documentType string, newDoc models.Document, mergeConfig merge.Config) UpdateCommand {
 	uc := UpdateCommand{
 		Index:        index,
 		DocumentID:   documentID,
@@ -23,5 +23,5 @@ func NewUpdateCommand(index string, documentID string, documentType string, newD
 		NewDoc:       newDoc,
 		MergeConfig:  mergeConfig,
 	}
-	return &uc
+	return uc
 }

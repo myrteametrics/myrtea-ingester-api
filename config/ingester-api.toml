@@ -64,7 +64,7 @@ ELASTICSEARCH_URLS = ["http://localhost:9200"]
 
 # Specify if pre-update multi-get should be done directly to a specific index
 # Default value: false
-ELASTICSEARCH_DIRECT_MULTI_GET = "true"
+ELASTICSEARCH_DIRECT_MULTI_GET_MODE = "true"
 
 # Specify the maximum number of concurrent worker by type of ingested document (1 type of document = n workers)
 # Default value: 2

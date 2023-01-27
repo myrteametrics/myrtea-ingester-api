@@ -28,7 +28,7 @@ import (
 type IndexingWorker struct {
 	TypedIngester             *TypedIngester
 	ID                        int
-	Data                      chan *UpdateCommand
+	Data                      chan UpdateCommand
 	Client                    *elasticsearch.EsExecutor
 	metricWorkerQueueGauge    metrics.Gauge
 	metricWorkerMessage       metrics.Counter
@@ -57,11 +57,11 @@ var (
 // NewIndexingWorker returns a new IndexingWorker
 func NewIndexingWorker(typedIngester *TypedIngester, id int) *IndexingWorker {
 
-	var data chan *UpdateCommand
+	var data chan UpdateCommand
 	if workerQueueSize := viper.GetInt("WORKER_QUEUE_BUFFER_SIZE"); workerQueueSize > 0 {
-		data = make(chan *UpdateCommand, viper.GetInt("WORKER_QUEUE_BUFFER_SIZE"))
+		data = make(chan UpdateCommand, viper.GetInt("WORKER_QUEUE_BUFFER_SIZE"))
 	} else {
-		data = make(chan *UpdateCommand)
+		data = make(chan UpdateCommand)
 	}
 
 	zap.L().Info("Initialize Elasticsearch client", zap.String("status", "in_progress"))
@@ -135,7 +135,7 @@ func (worker *IndexingWorker) Run() {
 	// }
 
 	bufferLength := viper.GetInt("WORKER_MAXIMUM_BUFFER_SIZE")
-	buffer := make([]*UpdateCommand, 0)
+	buffer := make([]UpdateCommand, 0)
 
 	forceFlushTimeout := viper.GetInt("WORKER_FORCE_FLUSH_TIMEOUT_SEC")
 	forceFlush := worker.resetForceFlush(forceFlushTimeout)
@@ -172,58 +172,52 @@ func (worker *IndexingWorker) resetForceFlush(sec int) <-chan time.Time {
 	return time.After(time.Duration(sec) * time.Second)
 }
 
-func (worker *IndexingWorker) flushEsBuffer(buffer []*UpdateCommand) {
+func (worker *IndexingWorker) flushEsBuffer(buffer []UpdateCommand) {
 	if len(buffer) == 0 {
 		return
 	}
 
 	start := time.Now()
-	updateCommandGroups := make(map[string][]*UpdateCommand)
+	updateCommandGroupsMap := make(map[string][]UpdateCommand)
 	for _, uc := range buffer {
-		if updateCommandGroups[uc.DocumentID] != nil {
-			updateCommandGroups[uc.DocumentID] = append(updateCommandGroups[uc.DocumentID], uc)
+		if updateCommandGroupsMap[uc.DocumentID] != nil {
+			updateCommandGroupsMap[uc.DocumentID] = append(updateCommandGroupsMap[uc.DocumentID], uc)
 		} else {
-			updateCommandGroups[uc.DocumentID] = []*UpdateCommand{uc}
+			updateCommandGroupsMap[uc.DocumentID] = []UpdateCommand{uc}
 		}
+	}
+
+	updateCommandGroups := make([][]UpdateCommand, 0)
+	for _, v := range updateCommandGroupsMap {
+		updateCommandGroups = append(updateCommandGroups, v)
 	}
 
 	if viper.GetBool("DEBUG_DRY_RUN_ELASTICSEARCH") {
 		return
 	}
-	if viper.GetBool("ELASTICSEARCH_DIRECT_MULTI_GET") {
-		worker.DirectBulkChainedUpdate(updateCommandGroups)
+	if viper.GetBool("ELASTICSEARCH_DIRECT_MULTI_GET_MODE") {
+		worker.directBulkChainedUpdate(updateCommandGroups)
 	} else {
-		worker.BulkChainedUpdate(updateCommandGroups)
+		worker.bulkChainedUpdate(updateCommandGroups)
 	}
 
 	worker.metricWorkerMessage.With("status", "flushed").Add(float64(len(buffer)))
 	worker.metricWorkerFlushDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
 }
 
-func (worker *IndexingWorker) DirectBulkChainedUpdate(updateCommandGroups map[string][]*UpdateCommand) {
+func (worker *IndexingWorker) directBulkChainedUpdate(updateCommandGroups [][]UpdateCommand) {
 	zap.L().Info("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "starting"))
 
-	for k, v := range updateCommandGroups {
-		fmt.Println(k)
-		for _, a := range v {
-			fmt.Println(a)
-		}
-	}
-
 	zap.L().Info("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "directMultiGetDocs"))
-	refDocs, err := worker.DirectMultiGetDocs(updateCommandGroups)
+	refDocs, err := worker.directMultiGetDocs(updateCommandGroups)
 	if err != nil {
-		zap.L().Error("", zap.Error(err))
+		zap.L().Error("directMultiGetDocs", zap.Error(err))
 	}
 
 	zap.L().Info("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
 	push, err := worker.applyMergesV2(updateCommandGroups, refDocs)
 	if err != nil {
-		zap.L().Error("", zap.Error(err))
-	}
-
-	for _, p := range push {
-		fmt.Println(p)
+		zap.L().Error("applyMergesV2", zap.Error(err))
 	}
 
 	zap.L().Info("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "bulkIndex"))
@@ -235,20 +229,21 @@ func (worker *IndexingWorker) DirectBulkChainedUpdate(updateCommandGroups map[st
 	zap.L().Info("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "done"))
 }
 
-func (worker *IndexingWorker) DirectMultiGetDocs(updateCommandGroups map[string][]*UpdateCommand) ([]*models.Document, error) {
+func (worker *IndexingWorker) directMultiGetDocs(updateCommandGroups [][]UpdateCommand) ([]models.Document, error) {
 	docs := make([]*models.Document, 0)
-	for documentID, updateCommandGroup := range updateCommandGroups {
-		docs = append(docs, &models.Document{Index: updateCommandGroup[0].Index, ID: documentID})
+	for _, updateCommandGroup := range updateCommandGroups {
+		docs = append(docs, &models.Document{Index: updateCommandGroup[0].Index, ID: updateCommandGroup[0].DocumentID})
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
+
 	response, err := worker.Client.MultiGet(ctx, docs)
 	if err != nil || response.Docs == nil || len(response.Docs) == 0 {
 		zap.L().Error("MultiGet (self)", zap.Error(err))
 	}
 
-	refDocs := make([]*models.Document, 0)
+	refDocs := make([]models.Document, 0)
 	for i, d := range response.Docs {
 		data, err := jsoniter.Marshal(d.Source)
 		if err != nil {
@@ -261,15 +256,15 @@ func (worker *IndexingWorker) DirectMultiGetDocs(updateCommandGroups map[string]
 			zap.L().Error("update multiget unmarshal", zap.Error(err))
 		}
 
-		if len(refDocs) > i && refDocs[i] == nil {
+		if len(refDocs) > i && refDocs[i].ID == "" {
 			if d.Found {
-				refDocs[i] = models.NewDocument(d.Id, d.Index, d.Type, source)
+				refDocs[i] = models.Document{ID: d.Id, Index: d.Index, IndexType: d.Type, Source: source}
 			}
 		} else {
 			if d.Found {
-				refDocs = append(refDocs, models.NewDocument(d.Id, d.Index, d.Type, source))
+				refDocs = append(refDocs, models.Document{ID: d.Id, Index: d.Index, IndexType: d.Type, Source: source})
 			} else {
-				refDocs = append(refDocs, nil)
+				refDocs = append(refDocs, models.Document{})
 			}
 		}
 	}
@@ -277,18 +272,13 @@ func (worker *IndexingWorker) DirectMultiGetDocs(updateCommandGroups map[string]
 	return refDocs, nil
 }
 
-// BulkChainedUpdate process multiple groups of UpdateCommand
+// bulkChainedUpdate process multiple groups of UpdateCommand
 // It execute sequentialy every single UpdateCommand on a specific "source" document, for each group of commands
-func (worker *IndexingWorker) BulkChainedUpdate(updateCommandGroups map[string][]*UpdateCommand) {
-
-	documents := make([][]*UpdateCommand, 0)
-	for _, v := range updateCommandGroups {
-		documents = append(documents, v)
-	}
+func (worker *IndexingWorker) bulkChainedUpdate(updateCommandGroups [][]UpdateCommand) {
 
 	zap.L().Info("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "starting"))
 	docs := make([]GetQuery, 0)
-	for _, commands := range documents {
+	for _, commands := range updateCommandGroups {
 		docs = append(docs, GetQuery{DocumentType: commands[0].DocumentType, ID: commands[0].DocumentID})
 	}
 	if len(docs) == 0 {
@@ -309,7 +299,7 @@ func (worker *IndexingWorker) BulkChainedUpdate(updateCommandGroups map[string][
 	}
 
 	zap.L().Info("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
-	push, err := worker.applyMerges(documents, refDocs)
+	push, err := worker.applyMerges(updateCommandGroups, refDocs)
 	if err != nil {
 		zap.L().Error("applyMerges", zap.Error(err))
 	}
@@ -335,11 +325,11 @@ func (worker *IndexingWorker) getIndices(documentType string) ([]string, error) 
 	return indices, err
 }
 
-func (worker *IndexingWorker) multiGetFindRefDocsFull(indices []string, docs []GetQuery) ([]*models.Document, error) {
+func (worker *IndexingWorker) multiGetFindRefDocsFull(indices []string, docs []GetQuery) ([]models.Document, error) {
 	// TODO: parrallelism of multiple bulk get ?
 	// Or chain GET on missing results only (instead of full set)
 	zap.L().Info("multiGetFindRefDocsFull", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "loop indices"))
-	refDocs := make([]*models.Document, 0)
+	refDocs := make([]models.Document, 0)
 	for _, index := range indices {
 
 		zap.L().Info("multiGetFindRefDocsFull", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("index", index), zap.String("step", "index"))
@@ -361,15 +351,15 @@ func (worker *IndexingWorker) multiGetFindRefDocsFull(indices []string, docs []G
 				zap.L().Error("update multiget unmarshal", zap.Error(err))
 			}
 
-			if len(refDocs) > i && refDocs[i] == nil {
+			if len(refDocs) > i && refDocs[i].ID == "" {
 				if d.Found {
-					refDocs[i] = models.NewDocument(d.Id, d.Index, d.Type, source)
+					refDocs[i] = *models.NewDocument(d.Id, d.Index, d.Type, source)
 				}
 			} else {
 				if d.Found {
-					refDocs = append(refDocs, models.NewDocument(d.Id, d.Index, d.Type, source))
+					refDocs = append(refDocs, *models.NewDocument(d.Id, d.Index, d.Type, source))
 				} else {
-					refDocs = append(refDocs, nil)
+					refDocs = append(refDocs, models.Document{})
 				}
 			}
 		}
@@ -394,11 +384,11 @@ func (worker *IndexingWorker) multiGetFindRefDocs(index string, queries []GetQue
 	return response.Docs, nil
 }
 
-func (worker *IndexingWorker) applyMerges(documents [][]*UpdateCommand, refDocs []*models.Document) ([]*models.Document, error) {
-	var push = make([]*models.Document, 0)
+func (worker *IndexingWorker) applyMerges(documents [][]UpdateCommand, refDocs []models.Document) ([]models.Document, error) {
+	var push = make([]models.Document, 0)
 	var i int
 	for _, commands := range documents {
-		var doc *models.Document
+		var doc models.Document
 		if len(refDocs) > i {
 			doc = refDocs[i]
 		}
@@ -417,34 +407,38 @@ func (worker *IndexingWorker) applyMerges(documents [][]*UpdateCommand, refDocs 
 	return push, nil
 }
 
-func (worker *IndexingWorker) applyMergesV2(updateCommandGroups map[string][]*UpdateCommand, refDocs []*models.Document) ([]*models.Document, error) {
-	var push = make([]*models.Document, 0)
-	var i int
-	for _, updateCommandGroup := range updateCommandGroups {
-		var doc *models.Document
-		if len(refDocs) > i {
-			doc = refDocs[i]
-		}
+func (worker *IndexingWorker) applyMergesV2(updateCommandGroups [][]UpdateCommand, refDocs []models.Document) ([]models.Document, error) {
 
-		// Index setup should probably not be here (be before in the indexing chain)
-		for _, command := range updateCommandGroup {
-			if command.NewDoc.Index == "" {
-				command.NewDoc.Index = buildAliasName(command.DocumentType, index.Last)
-			}
-			doc = ApplyMergeLight(doc, command)
+	push := make([]models.Document, 0)
+	for i, updateCommandGroup := range updateCommandGroups {
+		var pushDoc models.Document
+		if len(refDocs) > i {
+			pushDoc = models.Document{ID: refDocs[i].ID, Index: refDocs[i].Index, IndexType: refDocs[i].IndexType, Source: refDocs[i].Source}
 		}
-		doc.IndexType = "document"
-		push = append(push, doc)
-		i++ // synchronise map iteration with reponse.Docs
+		for _, command := range updateCommandGroup {
+			if pushDoc.ID == "" {
+				pushDoc = models.Document{ID: command.NewDoc.ID, Index: command.NewDoc.Index, IndexType: command.NewDoc.IndexType, Source: command.NewDoc.Source}
+			} else {
+				pushDoc = ApplyMergeLight(pushDoc, command)
+			}
+		}
+		push = append(push, pushDoc)
 	}
+
 	return push, nil
 }
 
-func (worker *IndexingWorker) bulkIndex(docs []*models.Document) error {
+func (worker *IndexingWorker) bulkIndex(docs []models.Document) error {
+
+	docs2 := make([]*models.Document, 0)
+	for _, d := range docs {
+		docs2 = append(docs2, &models.Document{ID: d.ID, Index: d.Index, IndexType: d.IndexType, Source: d.Source})
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
 
-	bulkResponse, err := worker.Client.BulkIndex(ctx, docs)
+	bulkResponse, err := worker.Client.BulkIndex(ctx, docs2)
 	if err != nil {
 		zap.L().Error("BulkIndex response", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Error(err))
 		return err
@@ -456,24 +450,24 @@ func (worker *IndexingWorker) bulkIndex(docs []*models.Document) error {
 	return nil
 }
 
-func ApplyMergeLight(doc *models.Document, command *UpdateCommand) *models.Document {
+func ApplyMergeLight(doc models.Document, command UpdateCommand) models.Document {
 	zap.L().Debug("ApplyMerge", zap.String("mergeMode", command.MergeConfig.Mode.String()), zap.Any("doc", doc), zap.Any("command", command))
 
 	switch command.MergeConfig.Mode {
 	case merge.Self:
 		// COMMAND.NEWDOC enriched with DOC (pointer swap !) with config COMMAND.MERGECONFIG
 		// The new pushed document become the new "reference" (and is enriched by the data of an existing one)
-		output := command.MergeConfig.Apply(command.NewDoc, doc)
+		output := command.MergeConfig.Apply(&command.NewDoc, &doc)
 		zap.L().Debug("ApplyMergeResult", zap.Any("output", output))
-		return output
+		return *output
 	default:
 		zap.L().Warn("mergeconfig mode not supported", zap.String("mode", command.MergeConfig.Mode.String()))
 	}
-	return nil
+	return models.Document{}
 }
 
 // // ApplyMerge execute a merge based on a specific UpdateCommand
-// func ApplyMerge(doc *models.Document, command *UpdateCommand, secondary []*models.Document) *models.Document {
+// func ApplyMerge(doc models.Document, command UpdateCommand, secondary []models.Document) models.Document {
 // 	// Important : "doc" is always the output document
 // 	zap.L().Debug("ApplyMerge", zap.String("mergeMode", command.MergeConfig.Mode.String()), zap.Any("doc", doc), zap.Any("command", command), zap.Any("secondary", secondary))
 
@@ -517,9 +511,9 @@ type GetQuery struct {
 	ID           string
 }
 
-func (getQuery *GetQuery) convertToExecutor() *models.Document {
+func (getQuery *GetQuery) convertToExecutor() models.Document {
 	alias := buildAliasName(getQuery.DocumentType, index.All)
-	return models.NewDocument(getQuery.ID, alias, "document", nil)
+	return *models.NewDocument(getQuery.ID, alias, "document", nil)
 }
 
 func buildAliasName(documentType string, depth index.Depth) string {
