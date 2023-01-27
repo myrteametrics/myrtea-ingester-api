@@ -11,11 +11,13 @@ type UpdateCommand struct {
 	DocumentType string           `json:"documentType"`
 	NewDoc       *models.Document `json:"doc"`
 	MergeConfig  *merge.Config    `json:"merge"`
+	Index        string           `json:"index"`
 }
 
 // NewUpdateCommand returns a new UpdateCommand
-func NewUpdateCommand(documentID string, documentType string, newDoc *models.Document, mergeConfig *merge.Config) *UpdateCommand {
+func NewUpdateCommand(index string, documentID string, documentType string, newDoc *models.Document, mergeConfig *merge.Config) *UpdateCommand {
 	uc := UpdateCommand{
+		Index:        index,
 		DocumentID:   documentID,
 		DocumentType: documentType,
 		NewDoc:       newDoc,

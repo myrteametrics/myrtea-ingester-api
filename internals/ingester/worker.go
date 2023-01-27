@@ -178,41 +178,115 @@ func (worker *IndexingWorker) flushEsBuffer(buffer []*UpdateCommand) {
 	}
 
 	start := time.Now()
-
-	m := make(map[string][]*UpdateCommand)
+	updateCommandGroups := make(map[string][]*UpdateCommand)
 	for _, uc := range buffer {
-		if m[uc.DocumentID] != nil {
-			m[uc.DocumentID] = append(m[uc.DocumentID], uc)
+		if updateCommandGroups[uc.DocumentID] != nil {
+			updateCommandGroups[uc.DocumentID] = append(updateCommandGroups[uc.DocumentID], uc)
 		} else {
-			m[uc.DocumentID] = []*UpdateCommand{uc}
+			updateCommandGroups[uc.DocumentID] = []*UpdateCommand{uc}
 		}
-	}
-
-	sl := make([][]*UpdateCommand, 0)
-	for _, v := range m {
-		sl = append(sl, v)
-	}
-
-	for key, entry := range m {
-		zap.L().Debug("flushEsBuffer", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
-			zap.Int("WorkerID", worker.ID), zap.String("key", key), zap.Int("len(entry)", len(entry)))
 	}
 
 	if viper.GetBool("DEBUG_DRY_RUN_ELASTICSEARCH") {
 		return
 	}
-	worker.BulkChainedUpdate(sl)
+	if viper.GetBool("ELASTICSEARCH_DIRECT_MULTI_GET") {
+		worker.DirectBulkChainedUpdate(updateCommandGroups)
+	} else {
+		worker.BulkChainedUpdate(updateCommandGroups)
+	}
 
 	worker.metricWorkerMessage.With("status", "flushed").Add(float64(len(buffer)))
 	worker.metricWorkerFlushDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
 }
 
+func (worker *IndexingWorker) DirectBulkChainedUpdate(updateCommandGroups map[string][]*UpdateCommand) {
+	zap.L().Info("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "starting"))
+
+	for k, v := range updateCommandGroups {
+		fmt.Println(k)
+		for _, a := range v {
+			fmt.Println(a)
+		}
+	}
+
+	zap.L().Info("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "directMultiGetDocs"))
+	refDocs, err := worker.DirectMultiGetDocs(updateCommandGroups)
+	if err != nil {
+		zap.L().Error("", zap.Error(err))
+	}
+
+	zap.L().Info("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
+	push, err := worker.applyMergesV2(updateCommandGroups, refDocs)
+	if err != nil {
+		zap.L().Error("", zap.Error(err))
+	}
+
+	for _, p := range push {
+		fmt.Println(p)
+	}
+
+	zap.L().Info("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "bulkIndex"))
+	err = worker.bulkIndex(push)
+	if err != nil {
+		zap.L().Error("bulkIndex", zap.Error(err))
+	}
+
+	zap.L().Info("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "done"))
+}
+
+func (worker *IndexingWorker) DirectMultiGetDocs(updateCommandGroups map[string][]*UpdateCommand) ([]*models.Document, error) {
+	docs := make([]*models.Document, 0)
+	for documentID, updateCommandGroup := range updateCommandGroups {
+		docs = append(docs, &models.Document{Index: updateCommandGroup[0].Index, ID: documentID})
+	}
+
+	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	defer cancel()
+	response, err := worker.Client.MultiGet(ctx, docs)
+	if err != nil || response.Docs == nil || len(response.Docs) == 0 {
+		zap.L().Error("MultiGet (self)", zap.Error(err))
+	}
+
+	refDocs := make([]*models.Document, 0)
+	for i, d := range response.Docs {
+		data, err := jsoniter.Marshal(d.Source)
+		if err != nil {
+			zap.L().Error("update multiget unmarshal", zap.Error(err))
+		}
+
+		var source map[string]interface{}
+		err = jsoniter.Unmarshal(data, &source)
+		if err != nil {
+			zap.L().Error("update multiget unmarshal", zap.Error(err))
+		}
+
+		if len(refDocs) > i && refDocs[i] == nil {
+			if d.Found {
+				refDocs[i] = models.NewDocument(d.Id, d.Index, d.Type, source)
+			}
+		} else {
+			if d.Found {
+				refDocs = append(refDocs, models.NewDocument(d.Id, d.Index, d.Type, source))
+			} else {
+				refDocs = append(refDocs, nil)
+			}
+		}
+	}
+
+	return refDocs, nil
+}
+
 // BulkChainedUpdate process multiple groups of UpdateCommand
 // It execute sequentialy every single UpdateCommand on a specific "source" document, for each group of commands
-func (worker *IndexingWorker) BulkChainedUpdate(documents [][]*UpdateCommand) {
+func (worker *IndexingWorker) BulkChainedUpdate(updateCommandGroups map[string][]*UpdateCommand) {
+
+	documents := make([][]*UpdateCommand, 0)
+	for _, v := range updateCommandGroups {
+		documents = append(documents, v)
+	}
 
 	zap.L().Info("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "starting"))
-
 	docs := make([]GetQuery, 0)
 	for _, commands := range documents {
 		docs = append(docs, GetQuery{DocumentType: commands[0].DocumentType, ID: commands[0].DocumentID})
@@ -223,29 +297,29 @@ func (worker *IndexingWorker) BulkChainedUpdate(documents [][]*UpdateCommand) {
 	}
 
 	zap.L().Info("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "getindices"))
-
 	indices, err := worker.getIndices(docs[0].DocumentType)
 	if err != nil {
 		zap.L().Error("getIndices", zap.Error(err))
 	}
-	zap.L().Info("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "multiGetFindRefDocsFull"))
 
+	zap.L().Info("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "multiGetFindRefDocsFull"))
 	refDocs, err := worker.multiGetFindRefDocsFull(indices, docs)
 	if err != nil {
 		zap.L().Error("multiGetFindRefDocsFull", zap.Error(err))
 	}
-	zap.L().Info("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "bulkIndex"))
 
+	zap.L().Info("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
 	push, err := worker.applyMerges(documents, refDocs)
 	if err != nil {
 		zap.L().Error("applyMerges", zap.Error(err))
 	}
-	zap.L().Info("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
 
+	zap.L().Info("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "bulkIndex"))
 	err = worker.bulkIndex(push)
 	if err != nil {
 		zap.L().Error("bulkIndex", zap.Error(err))
 	}
+
 	zap.L().Info("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "done"))
 }
 
@@ -331,6 +405,29 @@ func (worker *IndexingWorker) applyMerges(documents [][]*UpdateCommand, refDocs 
 
 		// Index setup should probably not be here (be before in the indexing chain)
 		for _, command := range commands {
+			if command.NewDoc.Index == "" {
+				command.NewDoc.Index = buildAliasName(command.DocumentType, index.Last)
+			}
+			doc = ApplyMergeLight(doc, command)
+		}
+		doc.IndexType = "document"
+		push = append(push, doc)
+		i++ // synchronise map iteration with reponse.Docs
+	}
+	return push, nil
+}
+
+func (worker *IndexingWorker) applyMergesV2(updateCommandGroups map[string][]*UpdateCommand, refDocs []*models.Document) ([]*models.Document, error) {
+	var push = make([]*models.Document, 0)
+	var i int
+	for _, updateCommandGroup := range updateCommandGroups {
+		var doc *models.Document
+		if len(refDocs) > i {
+			doc = refDocs[i]
+		}
+
+		// Index setup should probably not be here (be before in the indexing chain)
+		for _, command := range updateCommandGroup {
 			if command.NewDoc.Index == "" {
 				command.NewDoc.Index = buildAliasName(command.DocumentType, index.Last)
 			}

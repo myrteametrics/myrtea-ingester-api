@@ -62,6 +62,10 @@ SWAGGER_HOST = "localhost:9001"
 # Default value: "http://localhost:9200"
 ELASTICSEARCH_URLS = ["http://localhost:9200"]
 
+# Specify if pre-update multi-get should be done directly to a specific index
+# Default value: false
+ELASTICSEARCH_DIRECT_MULTI_GET = "true"
+
 # Specify the maximum number of concurrent worker by type of ingested document (1 type of document = n workers)
 # Default value: 2
 INGESTER_MAXIMUM_WORKERS = "2"
