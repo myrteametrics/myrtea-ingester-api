@@ -59,7 +59,7 @@ func NewIndexingWorker(typedIngester *TypedIngester, id int) *IndexingWorker {
 
 	var data chan UpdateCommand
 	if workerQueueSize := viper.GetInt("WORKER_QUEUE_BUFFER_SIZE"); workerQueueSize > 0 {
-		data = make(chan UpdateCommand, viper.GetInt("WORKER_QUEUE_BUFFER_SIZE"))
+		data = make(chan UpdateCommand, workerQueueSize)
 	} else {
 		data = make(chan UpdateCommand)
 	}
@@ -86,7 +86,7 @@ func NewIndexingWorker(typedIngester *TypedIngester, id int) *IndexingWorker {
 	defer zapDebugLogger.Sync()
 
 	retryClient := retryablehttp.NewClient()
-	retryClient.HTTPClient.Timeout = viper.GetDuration("SINK_HTTP_TIMEOUT")
+	retryClient.HTTPClient.Timeout = viper.GetDuration("ELASTICSEARCH_HTTP_TIMEOUT")
 	retryClient.Logger = utils.NewZapLeveledLogger(zapDebugLogger)
 
 	client, err := elastic.NewClient(elastic.SetSniff(false),
