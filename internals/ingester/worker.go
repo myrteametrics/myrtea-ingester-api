@@ -1,7 +1,9 @@
 package ingester
 
 import (
+	"bytes"
 	"context"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log"
@@ -9,12 +11,14 @@ import (
 	"strings"
 	"time"
 
+	goelasticsearch "github.com/elastic/go-elasticsearch/v6"
+	"github.com/elastic/go-elasticsearch/v6/esapi"
 	"github.com/go-kit/kit/metrics"
 	"github.com/go-kit/kit/metrics/prometheus"
+	"github.com/google/uuid"
 	"github.com/hashicorp/go-retryablehttp"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/merge"
-	"github.com/myrteametrics/myrtea-sdk/v4/elasticsearch"
 	"github.com/myrteametrics/myrtea-sdk/v4/index"
 	"github.com/myrteametrics/myrtea-sdk/v4/models"
 	"github.com/myrteametrics/myrtea-sdk/v4/utils"
@@ -26,10 +30,11 @@ import (
 
 // IndexingWorker is the unit of processing which can be started in parallel for elasticsearch ingestion
 type IndexingWorker struct {
+	Uuid                      uuid.UUID
 	TypedIngester             *TypedIngester
 	ID                        int
 	Data                      chan UpdateCommand
-	Client                    *elasticsearch.EsExecutor
+	Client                    *goelasticsearch.Client
 	metricWorkerQueueGauge    metrics.Gauge
 	metricWorkerMessage       metrics.Counter
 	metricWorkerFlushDuration metrics.Histogram
@@ -89,23 +94,39 @@ func NewIndexingWorker(typedIngester *TypedIngester, id int) *IndexingWorker {
 	retryClient.HTTPClient.Timeout = viper.GetDuration("ELASTICSEARCH_HTTP_TIMEOUT")
 	retryClient.Logger = utils.NewZapLeveledLogger(zapDebugLogger)
 
-	client, err := elastic.NewClient(elastic.SetSniff(false),
-		elastic.SetHealthcheckTimeoutStartup(60*time.Second),
-		elastic.SetURL(viper.GetStringSlice("ELASTICSEARCH_URLS")...),
-		elastic.SetHttpClient(retryClient.StandardClient()),
-	)
-	if err != nil {
-		zap.L().Error("Elasticsearch client initialization", zap.Error(err))
-	} else {
-		zap.L().Info("Initialize Elasticsearch client", zap.String("status", "done"))
+	cfg := goelasticsearch.Config{
+		Addresses:     viper.GetStringSlice("ELASTICSEARCH_URLS"),
+		EnableMetrics: true,
+		MaxRetries:    5,
+		RetryOnStatus: []int{502, 503, 504, 429},
 	}
-	executor := &elasticsearch.EsExecutor{Client: client}
+	goelasticsearch.NewDefaultClient()
+	client, err := goelasticsearch.NewClient(cfg)
+	if err != nil {
+		zap.L().Error("GoElasticsearch client initialization", zap.Error(err))
+	} else {
+		zap.L().Info("Initialize GoElasticsearch client", zap.String("status", "done"), zap.Duration("http timeout", viper.GetDuration("ELASTICSEARCH_HTTP_TIMEOUT")))
+	}
+
+	// client, err := elastic.NewClient(elastic.SetSniff(false),
+	// 	elastic.SetHealthcheckTimeoutStartup(60*time.Second),
+	// 	elastic.SetURL(viper.GetStringSlice("ELASTICSEARCH_URLS")...),
+	// 	elastic.SetHttpClient(retryClient.StandardClient()),
+	// )
+	// if err != nil {
+	// 	zap.L().Error("Elasticsearch client initialization", zap.Error(err))
+	// } else {
+	// 	zap.L().Info("Initialize Elasticsearch client", zap.String("status", "done"), zap.Duration("http timeout", viper.GetDuration("ELASTICSEARCH_HTTP_TIMEOUT")))
+	// }
+	// executor := &elasticsearch.EsExecutor{Client: client}
 
 	worker := &IndexingWorker{
-		TypedIngester:             typedIngester,
-		ID:                        id,
-		Data:                      data,
-		Client:                    executor,
+		Uuid:          uuid.New(),
+		TypedIngester: typedIngester,
+		ID:            id,
+		Data:          data,
+		// Client:                    executor,
+		Client:                    client,
 		metricWorkerQueueGauge:    _metricWorkerQueueGauge.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
 		metricWorkerMessage:       _metricWorkerMessage.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
 		metricWorkerFlushDuration: _metricWorkerFlushDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
@@ -127,7 +148,7 @@ func (worker *IndexingWorker) Run() {
 	// for {
 	// 	select {
 	// 	case uc := <-worker.Data:
-	// 		// zap.L().Info("Receive UpdateCommand", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Any("UpdateCommand", uc))
+	// 		// zap.L().Info("Receive UpdateCommand", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Any("UpdateCommand", uc))
 	// 		_ = uc
 	// 		worker.metricWorkerQueueGauge.Set(float64(len(worker.Data)))
 	// 		time.Sleep(time.Millisecond * 1000)
@@ -145,9 +166,9 @@ func (worker *IndexingWorker) Run() {
 
 		// Send indexing bulk (when buffer is full or on timeout)
 		case <-forceFlush:
-			zap.L().Info("Try on after timeout reached", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("workerLen", len(worker.Data)), zap.Int("Timeout", forceFlushTimeout))
+			zap.L().Info("Try on after timeout reached", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("workerLen", len(worker.Data)), zap.Int("Timeout", forceFlushTimeout))
 			if len(buffer) > 0 {
-				zap.L().Info("Flushing on timeout reached", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("workerLen", len(worker.Data)), zap.Int("Timeout", forceFlushTimeout))
+				zap.L().Info("Flushing on timeout reached", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("workerLen", len(worker.Data)), zap.Int("Timeout", forceFlushTimeout))
 				worker.flushEsBuffer(buffer)
 				buffer = buffer[:0]
 			}
@@ -155,10 +176,10 @@ func (worker *IndexingWorker) Run() {
 
 		// Build indexing bulk
 		case uc := <-worker.Data:
-			zap.L().Debug("Receive UpdateCommand", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Any("UpdateCommand", uc))
+			zap.L().Debug("Receive UpdateCommand", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Any("UpdateCommand", uc))
 			buffer = append(buffer, uc)
 			if len(buffer) >= bufferLength {
-				zap.L().Info("Try flushing on full buffer", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("workerLen", len(worker.Data)))
+				zap.L().Info("Try flushing on full buffer", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("workerLen", len(worker.Data)))
 				worker.flushEsBuffer(buffer)
 				buffer = buffer[:0]
 				forceFlush = worker.resetForceFlush(forceFlushTimeout)
@@ -235,12 +256,52 @@ func (worker *IndexingWorker) directMultiGetDocs(updateCommandGroups [][]UpdateC
 		docs = append(docs, &models.Document{Index: updateCommandGroup[0].Index, ID: updateCommandGroup[0].DocumentID})
 	}
 
+	zap.L().Info("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID))
+
+	source := make(map[string]interface{})
+	sourceItems := make([]interface{}, len(docs))
+	for i, doc := range docs {
+		src, err := elastic.NewMultiGetItem().Index(doc.Index).Type(doc.IndexType).Id(doc.ID).Source()
+		if err != nil {
+			zap.L().Warn("cannot convert item to source()", zap.Error(err))
+			continue
+		}
+		sourceItems[i] = src
+	}
+	source["docs"] = sourceItems
+
+	var body = new(bytes.Buffer)
+	err := json.NewEncoder(body).Encode(source)
+	if err != nil {
+		zap.L().Warn("json encode source", zap.Error(err))
+		// return make([]*elastic.GetResult, 0), err
+	}
+
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
+	res, err := esapi.MgetRequest{
+		Body: body,
+	}.Do(ctx, worker.Client)
+	if err != nil {
+		zap.L().Warn("json encode source", zap.Error(err))
+		// return make([]*elastic.GetResult, 0), err
+	}
+	defer res.Body.Close()
+	if res.IsError() {
+		zap.L().Error("mgetRequest failed", zap.Error(err))
+		// return make([]*elastic.GetResult, 0), err
+	}
 
-	response, err := worker.Client.MultiGet(ctx, docs)
+	var response elastic.MgetResponse
+	if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
+		zap.L().Error("parsing the response body", zap.Error(err))
+		// return make([]*elastic.GetResult, 0), err
+	}
+	zap.L().Info("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("status", "done"))
+
 	if err != nil || response.Docs == nil || len(response.Docs) == 0 {
 		zap.L().Error("MultiGet (self)", zap.Error(err))
+		// return make([]*elastic.GetResult, 0), err
 	}
 
 	refDocs := make([]models.Document, 0)
@@ -282,7 +343,7 @@ func (worker *IndexingWorker) bulkChainedUpdate(updateCommandGroups [][]UpdateCo
 		docs = append(docs, GetQuery{DocumentType: commands[0].DocumentType, ID: commands[0].DocumentID})
 	}
 	if len(docs) == 0 {
-		zap.L().Warn("empty docs update", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID))
+		zap.L().Warn("empty docs update", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID))
 		return
 	}
 
@@ -318,9 +379,30 @@ func (worker *IndexingWorker) getIndices(documentType string) ([]string, error) 
 	defer cancel()
 
 	alias := buildAliasName(documentType, index.Patch)
-	indices, err := worker.Client.GetIndicesByAlias(ctx, alias)
+
+	res, err := esapi.IndicesGetAliasRequest{Name: []string{alias}}.Do(ctx, worker.Client)
 	if err != nil {
-		zap.L().Error("GetIndicesByAlias", zap.Error(err), zap.String("alias", alias))
+		zap.L().Error("", zap.Error(err))
+		return make([]string, 0), errors.New("alias not found")
+
+	}
+	defer res.Body.Close()
+	if res.IsError() {
+		zap.L().Error("Alias cannot be found", zap.String("alias", alias))
+		return make([]string, 0), errors.New("alias not found")
+	}
+
+	r := make(map[string]struct {
+		Aliases map[string]interface{} `json:"aliases"`
+	})
+	if err := json.NewDecoder(res.Body).Decode(&r); err != nil {
+		zap.L().Error("decode alias response", zap.Error(err), zap.String("alias", alias), zap.Any("request", esapi.IndicesGetAliasRequest{Name: []string{alias}}))
+		return make([]string, 0), errors.New("alias not found")
+	}
+
+	indices := make([]string, 0)
+	for k := range r {
+		indices = append(indices, k)
 	}
 	return indices, err
 }
@@ -328,16 +410,16 @@ func (worker *IndexingWorker) getIndices(documentType string) ([]string, error) 
 func (worker *IndexingWorker) multiGetFindRefDocsFull(indices []string, docs []GetQuery) ([]models.Document, error) {
 	// TODO: parrallelism of multiple bulk get ?
 	// Or chain GET on missing results only (instead of full set)
-	zap.L().Info("multiGetFindRefDocsFull", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "loop indices"))
+	// zap.L().Info("multiGetFindRefDocsFull", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "loop indices"))
 	refDocs := make([]models.Document, 0)
 	for _, index := range indices {
 
-		zap.L().Info("multiGetFindRefDocsFull", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("index", index), zap.String("step", "index"))
+		// zap.L().Info("multiGetFindRefDocsFull", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("index", index), zap.String("step", "index"))
 		responseDocs, err := worker.multiGetFindRefDocs(index, docs)
 		if err != nil {
 			zap.L().Error("multiGetFindRefDocs", zap.Error(err))
 		}
-		zap.L().Info("multiGetFindRefDocsFull", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("index", index), zap.String("step", "loop docs"))
+		// zap.L().Info("multiGetFindRefDocsFull", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("index", index), zap.String("step", "loop docs"))
 
 		for i, d := range responseDocs {
 			data, err := jsoniter.Marshal(d.Source)
@@ -368,15 +450,55 @@ func (worker *IndexingWorker) multiGetFindRefDocsFull(indices []string, docs []G
 }
 
 func (worker *IndexingWorker) multiGetFindRefDocs(index string, queries []GetQuery) ([]*elastic.GetResult, error) {
-	d := make([]*models.Document, 0)
-	for _, doc := range queries {
-		d = append(d, models.NewDocument(doc.ID, index, "document", nil))
+	if len(queries) == 0 {
+		return nil, errors.New("docs[] is empty")
+	}
+
+	zap.L().Info("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("index", index))
+
+	source := make(map[string]interface{})
+	sourceItems := make([]interface{}, len(queries))
+	for i, query := range queries {
+		src, err := elastic.NewMultiGetItem().Type("document").Id(query.ID).Source()
+		if err != nil {
+			zap.L().Warn("cannot convert item to source()", zap.Error(err))
+			continue
+		}
+		sourceItems[i] = src
+	}
+	source["docs"] = sourceItems
+
+	var body = new(bytes.Buffer)
+	err := json.NewEncoder(body).Encode(source)
+	if err != nil {
+		zap.L().Warn("json encode source", zap.Error(err))
+		return make([]*elastic.GetResult, 0), err
 	}
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
+	res, err := esapi.MgetRequest{
+		DocumentType: "document",
+		Index:        index,
+		Body:         body,
+	}.Do(ctx, worker.Client)
+	if err != nil {
+		zap.L().Warn("json encode source", zap.Error(err))
+		return make([]*elastic.GetResult, 0), err
+	}
+	defer res.Body.Close()
+	if res.IsError() {
+		zap.L().Error("mgetRequest failed", zap.Error(err))
+		return make([]*elastic.GetResult, 0), err
+	}
 
-	response, err := worker.Client.MultiGet(ctx, d)
+	var response elastic.MgetResponse
+	if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
+		zap.L().Error("parsing the response body", zap.Error(err))
+		return make([]*elastic.GetResult, 0), err
+	}
+	zap.L().Info("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("index", index), zap.String("status", "done"))
+
 	if err != nil || response.Docs == nil || len(response.Docs) == 0 {
 		zap.L().Error("MultiGet (self)", zap.Error(err))
 		return make([]*elastic.GetResult, 0), err
@@ -430,22 +552,42 @@ func (worker *IndexingWorker) applyMergesV2(updateCommandGroups [][]UpdateComman
 
 func (worker *IndexingWorker) bulkIndex(docs []models.Document) error {
 
-	docs2 := make([]*models.Document, 0)
-	for _, d := range docs {
-		docs2 = append(docs2, &models.Document{ID: d.ID, Index: d.Index, IndexType: d.IndexType, Source: d.Source})
-	}
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	bulkResponse, err := worker.Client.BulkIndex(ctx, docs2)
+	buf := bytes.NewBuffer(make([]byte, 0))
+
+	for _, doc := range docs {
+		req := elastic.NewBulkIndexRequest().Index(doc.Index).Type(doc.IndexType).Id(doc.ID).Doc(doc.Source)
+		source, err := req.Source()
+		if err != nil {
+			zap.L().Error("", zap.Error(err))
+		}
+		for _, line := range source {
+			buf.WriteString(line)
+			buf.WriteByte('\n')
+		}
+	}
+	res, err := esapi.BulkRequest{Body: buf}.Do(ctx, worker.Client)
 	if err != nil {
-		zap.L().Error("BulkIndex response", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Error(err))
+		zap.L().Error("bulkRequest", zap.Error(err))
 		return err
 	}
-	if bulkResponse != nil && len(bulkResponse.Failed()) > 0 {
-		zap.L().Error("Error during bulkIndex", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Any("bulkResponse.Failed()", bulkResponse.Failed()))
-		return errors.New("bulkindex failed")
+	if res.IsError() {
+		zap.L().Error("error")
+		return errors.New("error during bulkrequest")
+	}
+
+	zap.L().Info("Executing bulkindex", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("status", "done"))
+
+	var r elastic.BulkResponse
+	if err := json.NewDecoder(res.Body).Decode(&r); err != nil {
+		zap.L().Error("decode bulk response", zap.Error(err))
+		return err
+	}
+	if len(r.Failed()) > 0 {
+		zap.L().Error("Error during bulkIndex", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID))
+		return errors.New("bulkindex failed > 0")
 	}
 	return nil
 }

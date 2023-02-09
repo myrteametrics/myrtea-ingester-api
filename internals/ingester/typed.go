@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-kit/kit/metrics"
 	"github.com/go-kit/kit/metrics/prometheus"
+	"github.com/google/uuid"
 	config "github.com/myrteametrics/myrtea-ingester-api/v5/internals/configuration"
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/viper"
@@ -22,6 +23,7 @@ import (
 // TypedIngester is a component which process IngestRequest
 // It generates UpdateCommand which are processed by the attached IndexingWorker's
 type TypedIngester struct {
+	Uuid                          uuid.UUID
 	bulkIngester                  *BulkIngester
 	DocumentType                  string
 	Data                          chan *IngestRequest
@@ -43,6 +45,7 @@ var (
 func NewTypedIngester(bulkIngester *BulkIngester, documentType string) *TypedIngester {
 
 	ingester := TypedIngester{
+		Uuid:                          uuid.New(),
 		bulkIngester:                  bulkIngester,
 		DocumentType:                  documentType,
 		Data:                          make(chan *IngestRequest, viper.GetInt("TYPEDINGESTER_QUEUE_BUFFER_SIZE")),

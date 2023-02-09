@@ -48,7 +48,6 @@ func (ingester *BulkIngester) Ingest(bir BulkIngestRequest) error {
 	zap.L().Debug("Processing BulkIngestRequest", zap.String("BulkUUID", bir.UUID))
 
 	mergeConfig := bir.MergeConfig[0]
-
 	typedIngester := ingester.getTypedIngester(bir.DocumentType)
 
 	if len(typedIngester.Data)+len(bir.Docs) >= cap(typedIngester.Data) {

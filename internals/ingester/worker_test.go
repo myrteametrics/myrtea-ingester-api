@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/elastic/go-elasticsearch/v6/esapi"
 	config "github.com/myrteametrics/myrtea-ingester-api/v5/internals/configuration"
 	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/merge"
 	"github.com/myrteametrics/myrtea-sdk/v4/configuration"
@@ -22,9 +23,9 @@ func TestDirectBulkChainedUpdate2(t *testing.T) {
 	indexingWorker := NewIndexingWorker(typedIngester, 1)
 	// indexingWorker := IndexingWorker{}
 
-	t.Log(indexingWorker.Client.Client.DeleteIndex("myindex").Do(context.Background()))
-	t.Log(indexingWorker.Client.Client.DeleteIndex("myotherindex").Do(context.Background()))
-	t.Log(indexingWorker.Client.Client.DeleteIndex("myotherotherindex").Do(context.Background()))
+	esapi.IndicesDeleteRequest{AllowNoIndices: esapi.BoolPtr(true), Index: []string{"myindex"}}.Do(context.Background(), indexingWorker.Client)
+	esapi.IndicesDeleteRequest{AllowNoIndices: esapi.BoolPtr(true), Index: []string{"myotherindex"}}.Do(context.Background(), indexingWorker.Client)
+	esapi.IndicesDeleteRequest{AllowNoIndices: esapi.BoolPtr(true), Index: []string{"myotherotherindex"}}.Do(context.Background(), indexingWorker.Client)
 
 	docs := []models.Document{
 		{IndexType: "document", Index: "myindex", ID: "1", Source: map[string]interface{}{"a": "a", "b": "b"}},

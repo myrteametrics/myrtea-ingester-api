@@ -94,6 +94,18 @@ func main() {
 	}()
 	zap.L().Info("Server Started", zap.String("addr", srv.Addr))
 
+	// go func() {
+	// 	lis, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", 9011))
+	// 	if err != nil {
+	// 		log.Fatalf("failed to listen: %v", err)
+	// 	}
+	// 	var opts []grpc.ServerOption
+	// 	grpcServer := grpc.NewServer(opts...)
+	// 	pb.RegisterIngesterServer(grpcServer, handlers.NewIngesterServer())
+	// 	grpcServer.Serve(lis)
+	// }()
+	// zap.L().Info("GRPC Server Started", zap.String("addr", fmt.Sprintf("localhost:%d", 9011)))
+
 	<-done
 
 	ctxShutDown, cancel := context.WithTimeout(context.Background(), 5*time.Second)

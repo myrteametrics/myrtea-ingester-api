@@ -1,0 +1,54 @@
+syntax = "proto3";
+
+package pb;
+
+option go_package = "internals/protobuf/pb";
+option optimize_for = SPEED;
+
+import "google/protobuf/struct.proto";
+
+service Ingester {
+  rpc Ingest(BulkIngestRequest) returns (BulkIngestResponse) {}
+}
+
+message BulkIngestResponse {
+  string Status = 1;
+}
+
+message BulkIngestRequest {
+	string UUID = 1 [json_name = "uuid"];           
+	string DocumentType = 2 [json_name = "documentType"];
+	repeated MergeConfig MergeConfigs = 3 [json_name = "merge"];
+	repeated Document Documents = 4 [json_name = "docs"];
+}
+
+message MergeConfig {
+    bool ExistingAsMaster = 1 [json_name = "mode"];
+    string Mode = 2 [json_name = "existingAsMaster"];
+    string Type = 3 [json_name = "type"];
+    string LinkKey = 4 [json_name = "linkKey"];
+    repeated Group Groups = 5 [json_name = "groups"];
+}
+
+message Group {
+	string Condition = 1 [json_name = "condition"];
+	repeated string FieldReplace = 2 [json_name = "fieldReplace"];
+	repeated string FieldReplaceIfMissing = 3 [json_name = "fieldReplaceIfMissing"];
+	repeated string FieldMerge = 4 [json_name = "fieldMerge"];
+	repeated string FieldKeepLatest = 6 [json_name = "fieldMath"];
+	repeated string FieldKeepEarliest = 7 [json_name = "fieldKeepLatest"];
+	repeated string FieldForceUpdate = 8 [json_name = "fieldKeepEarliest"];
+	repeated FieldMath FieldMath = 5 [json_name = "fieldForceUpdate"];
+}
+
+message FieldMath {
+	string Expression = 1 [json_name = "expression"];
+	string OutputField = 2 [json_name = "outputField"];
+}
+
+message Document {
+	string ID = 1 [json_name = "id"];
+	string Index = 2 [json_name = "index"];
+	string IndexType = 3 [json_name = "type"];
+	google.protobuf.Struct Source = 4 [json_name = "source"];
+}
