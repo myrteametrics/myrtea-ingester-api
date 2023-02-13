@@ -227,27 +227,27 @@ func (worker *IndexingWorker) flushEsBuffer(buffer []UpdateCommand) {
 }
 
 func (worker *IndexingWorker) directBulkChainedUpdate(updateCommandGroups [][]UpdateCommand) {
-	zap.L().Info("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "starting"))
+	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "starting"))
 
-	zap.L().Info("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "directMultiGetDocs"))
+	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "directMultiGetDocs"))
 	refDocs, err := worker.directMultiGetDocs(updateCommandGroups)
 	if err != nil {
 		zap.L().Error("directMultiGetDocs", zap.Error(err))
 	}
 
-	zap.L().Info("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
+	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
 	push, err := worker.applyMergesV2(updateCommandGroups, refDocs)
 	if err != nil {
 		zap.L().Error("applyMergesV2", zap.Error(err))
 	}
 
-	zap.L().Info("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "bulkIndex"))
+	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "bulkIndex"))
 	err = worker.bulkIndex(push)
 	if err != nil {
 		zap.L().Error("bulkIndex", zap.Error(err))
 	}
 
-	zap.L().Info("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "done"))
+	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "done"))
 }
 
 func (worker *IndexingWorker) directMultiGetDocs(updateCommandGroups [][]UpdateCommand) ([]models.Document, error) {
@@ -256,7 +256,7 @@ func (worker *IndexingWorker) directMultiGetDocs(updateCommandGroups [][]UpdateC
 		docs = append(docs, &models.Document{Index: updateCommandGroup[0].Index, ID: updateCommandGroup[0].DocumentID})
 	}
 
-	zap.L().Info("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID))
+	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID))
 
 	source := make(map[string]interface{})
 	sourceItems := make([]interface{}, len(docs))
@@ -297,7 +297,7 @@ func (worker *IndexingWorker) directMultiGetDocs(updateCommandGroups [][]UpdateC
 		zap.L().Error("parsing the response body", zap.Error(err))
 		// return make([]*elastic.GetResult, 0), err
 	}
-	zap.L().Info("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("status", "done"))
+	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("status", "done"))
 
 	if err != nil || response.Docs == nil || len(response.Docs) == 0 {
 		zap.L().Error("MultiGet (self)", zap.Error(err))
@@ -337,7 +337,7 @@ func (worker *IndexingWorker) directMultiGetDocs(updateCommandGroups [][]UpdateC
 // It execute sequentialy every single UpdateCommand on a specific "source" document, for each group of commands
 func (worker *IndexingWorker) bulkChainedUpdate(updateCommandGroups [][]UpdateCommand) {
 
-	zap.L().Info("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "starting"))
+	zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "starting"))
 	docs := make([]GetQuery, 0)
 	for _, commands := range updateCommandGroups {
 		docs = append(docs, GetQuery{DocumentType: commands[0].DocumentType, ID: commands[0].DocumentID})
@@ -347,25 +347,25 @@ func (worker *IndexingWorker) bulkChainedUpdate(updateCommandGroups [][]UpdateCo
 		return
 	}
 
-	zap.L().Info("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "getindices"))
+	zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "getindices"))
 	indices, err := worker.getIndices(docs[0].DocumentType)
 	if err != nil {
 		zap.L().Error("getIndices", zap.Error(err))
 	}
 
-	zap.L().Info("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "multiGetFindRefDocsFull"))
+	zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "multiGetFindRefDocsFull"))
 	refDocs, err := worker.multiGetFindRefDocsFull(indices, docs)
 	if err != nil {
 		zap.L().Error("multiGetFindRefDocsFull", zap.Error(err))
 	}
 
-	zap.L().Info("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
+	zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
 	push, err := worker.applyMerges(updateCommandGroups, refDocs)
 	if err != nil {
 		zap.L().Error("applyMerges", zap.Error(err))
 	}
 
-	zap.L().Info("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "bulkIndex"))
+	zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "bulkIndex"))
 	err = worker.bulkIndex(push)
 	if err != nil {
 		zap.L().Error("bulkIndex", zap.Error(err))
@@ -454,7 +454,7 @@ func (worker *IndexingWorker) multiGetFindRefDocs(index string, queries []GetQue
 		return nil, errors.New("docs[] is empty")
 	}
 
-	zap.L().Info("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("index", index))
+	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("index", index))
 
 	source := make(map[string]interface{})
 	sourceItems := make([]interface{}, len(queries))
@@ -497,7 +497,7 @@ func (worker *IndexingWorker) multiGetFindRefDocs(index string, queries []GetQue
 		zap.L().Error("parsing the response body", zap.Error(err))
 		return make([]*elastic.GetResult, 0), err
 	}
-	zap.L().Info("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("index", index), zap.String("status", "done"))
+	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("index", index), zap.String("status", "done"))
 
 	if err != nil || response.Docs == nil || len(response.Docs) == 0 {
 		zap.L().Error("MultiGet (self)", zap.Error(err))
@@ -578,7 +578,7 @@ func (worker *IndexingWorker) bulkIndex(docs []models.Document) error {
 		return errors.New("error during bulkrequest")
 	}
 
-	zap.L().Info("Executing bulkindex", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("status", "done"))
+	zap.L().Debug("Executing bulkindex", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("status", "done"))
 
 	var r elastic.BulkResponse
 	if err := json.NewDecoder(res.Body).Decode(&r); err != nil {
