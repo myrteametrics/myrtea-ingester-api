@@ -485,6 +485,37 @@ func TestMergeConfigFieldMerge(t *testing.T) {
 	)
 }
 
+func TestMergeConfigFieldMerge_Objects(t *testing.T) {
+	testMerge(t,
+		Config{Type: "doc", Mode: Self, ExistingAsMaster: true,
+			Groups: []Group{
+				{
+					FieldMerge: []string{"a"},
+				}},
+		},
+		&models.Document{ID: "2", IndexType: "doc", Source: map[string]interface{}{"a": []interface{}{map[string]interface{}{"field1": "value1", "field2": "value2"}}}},
+		&models.Document{ID: "1", IndexType: "doc", Source: map[string]interface{}{"a": []interface{}{map[string]interface{}{"field1": "value1", "field2": "value2"}}}},
+		&models.Document{ID: "1", IndexType: "doc", Source: map[string]interface{}{"a": []interface{}{
+			map[string]interface{}{"field1": "value1", "field2": "value2"},
+			map[string]interface{}{"field1": "value1", "field2": "value2", "field3": "value3"}}}},
+	)
+
+	testMerge(t,
+		Config{Type: "doc", Mode: Self, ExistingAsMaster: false,
+			Groups: []Group{
+				{
+					FieldMerge: []string{"a"},
+				},
+			},
+		},
+		&models.Document{ID: "1", IndexType: "doc", Source: map[string]interface{}{"a": []interface{}{map[string]interface{}{"field1": "value1", "field2": "value2"}}}},
+		&models.Document{ID: "2", IndexType: "doc", Source: map[string]interface{}{"a": []interface{}{map[string]interface{}{"field1": "value1", "field2": "value2", "field3": "value3"}}}},
+		&models.Document{ID: "1", IndexType: "doc", Source: map[string]interface{}{"a": []interface{}{
+			map[string]interface{}{"field1": "value1", "field2": "value2"},
+			map[string]interface{}{"field1": "value1", "field2": "value2", "field3": "value3"}}}},
+	)
+}
+
 func TestMergeConfigPartial(t *testing.T) {
 	testMerge(t,
 		Config{Type: "doc", Mode: Self, ExistingAsMaster: false,

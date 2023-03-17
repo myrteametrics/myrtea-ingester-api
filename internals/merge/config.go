@@ -2,6 +2,7 @@ package merge
 
 import (
 	"encoding/json"
+	"reflect"
 	"strings"
 	"time"
 
@@ -218,20 +219,34 @@ func ApplyFieldMerge(fieldMerge []string, enricherSource map[string]interface{},
 	for _, field := range fieldMerge {
 		if _, ok := enricherSource[field]; ok {
 			m := make(map[interface{}]bool)
+			mArray := []map[string]interface{}{}
 
 			switch v := outputSource[field].(type) {
 			case []interface{}:
 				for _, e := range v {
 					m[e] = true
 				}
+			case map[string]interface{}:
+				mArray = appendUnique(mArray, v)
+			case []map[string]interface{}:
+				for _, a := range v {
+					mArray = appendUnique(mArray, a)
+				}
 			case interface{}:
 				m[v] = true
+
 			}
 
 			switch v := enricherSource[field].(type) {
 			case []interface{}:
 				for _, e := range v {
 					m[e] = true
+				}
+			case map[string]interface{}:
+				mArray = appendUnique(mArray, v)
+			case []map[string]interface{}:
+				for _, a := range v {
+					mArray = appendUnique(mArray, a)
 				}
 			case interface{}:
 				m[v] = true
@@ -241,9 +256,23 @@ func ApplyFieldMerge(fieldMerge []string, enricherSource map[string]interface{},
 			for k := range m {
 				newSlice = append(newSlice, k)
 			}
+
+			if len(mArray) > 0 {
+				newSlice = append(newSlice, mArray)
+			}
+
 			outputSource[field] = newSlice
 		}
 	}
+}
+
+func appendUnique(mArray []map[string]interface{}, newMap map[string]interface{}) []map[string]interface{} {
+	for _, m := range mArray {
+		if reflect.DeepEqual(m, newMap) {
+			return mArray
+		}
+	}
+	return append(mArray, newMap)
 }
 
 // ApplyFieldKeepLatest applies all FieldKeepLatest merging configuration on input documents
