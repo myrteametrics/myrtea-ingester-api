@@ -18,7 +18,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/hashicorp/go-retryablehttp"
 	jsoniter "github.com/json-iterator/go"
-	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/merge"
+	"github.com/myrteametrics/myrtea-sdk/v4/connector"
 	"github.com/myrteametrics/myrtea-sdk/v4/index"
 	"github.com/myrteametrics/myrtea-sdk/v4/models"
 	"github.com/myrteametrics/myrtea-sdk/v4/utils"
@@ -596,7 +596,7 @@ func ApplyMergeLight(doc models.Document, command UpdateCommand) models.Document
 	zap.L().Debug("ApplyMerge", zap.String("mergeMode", command.MergeConfig.Mode.String()), zap.Any("doc", doc), zap.Any("command", command))
 
 	switch command.MergeConfig.Mode {
-	case merge.Self:
+	case connector.Self:
 		// COMMAND.NEWDOC enriched with DOC (pointer swap !) with config COMMAND.MERGECONFIG
 		// The new pushed document become the new "reference" (and is enriched by the data of an existing one)
 		output := command.MergeConfig.Apply(&command.NewDoc, &doc)
@@ -614,14 +614,14 @@ func ApplyMergeLight(doc models.Document, command UpdateCommand) models.Document
 // 	zap.L().Debug("ApplyMerge", zap.String("mergeMode", command.MergeConfig.Mode.String()), zap.Any("doc", doc), zap.Any("command", command), zap.Any("secondary", secondary))
 
 // 	switch command.MergeConfig.Mode {
-// 	case merge.Self:
+// 	case connector.Self:
 // 		// COMMAND.NEWDOC enriched with DOC (pointer swap !) with config COMMAND.MERGECONFIG
 // 		// The new pushed document become the new "reference" (and is enriched by the data of an existing one)
 // 		output := command.MergeConfig.Apply(command.NewDoc, doc)
 // 		zap.L().Debug("ApplyMergeResult", zap.Any("output", output))
 // 		return output
 
-// 	case merge.EnrichFrom:
+// 	case connector.EnrichFrom:
 // 		// COMMAND.NEWDOC enriched by SECONDARY[KEY] with config COMMAND.MERGECONFIG
 // 		for _, sec := range secondary {
 // 			if sec == nil {
@@ -637,7 +637,7 @@ func ApplyMergeLight(doc models.Document, command UpdateCommand) models.Document
 // 		zap.L().Debug("ApplyMergeResult", zap.Any("doc", doc))
 // 		return doc
 
-// 	case merge.EnrichTo:
+// 	case connector.EnrichTo:
 // 		// DOC enriched WITH COMMAND.NEWDOC (NO pointer swap !) with config COMMAND.MERGECONFIG
 // 		// The old existing document stay the reference (and is enriched with the data of a new one)
 // 		command.MergeConfig.Apply(doc, command.NewDoc)

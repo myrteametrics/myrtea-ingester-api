@@ -6,15 +6,15 @@ import (
 
 	"github.com/elastic/go-elasticsearch/v6/esapi"
 	config "github.com/myrteametrics/myrtea-ingester-api/v5/internals/configuration"
-	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/merge"
-	"github.com/myrteametrics/myrtea-sdk/v4/configuration"
+	"github.com/myrteametrics/myrtea-sdk/v4/connector"
+	"github.com/myrteametrics/myrtea-sdk/v4/helpers"
 	"github.com/myrteametrics/myrtea-sdk/v4/models"
 	"github.com/spf13/viper"
 )
 
 func TestDirectBulkChainedUpdate2(t *testing.T) {
-	configuration.InitializeConfig(config.AllowedConfigKey, config.ConfigName, config.ConfigPath, config.EnvPrefix)
-	configuration.InitLogger(viper.GetBool("LOGGER_PRODUCTION"))
+	helpers.InitializeConfig(config.AllowedConfigKey, config.ConfigName, config.ConfigPath, config.EnvPrefix)
+	helpers.InitLogger(viper.GetBool("LOGGER_PRODUCTION"))
 
 	// executor, _ := elasticsearch.NewEsExecutor(context.Background(), []string{""})
 	// bulkIngester := NewBulkIngester(executor)
@@ -37,8 +37,8 @@ func TestDirectBulkChainedUpdate2(t *testing.T) {
 }
 
 func TestDirectBulkChainedUpdate(t *testing.T) {
-	configuration.InitializeConfig(config.AllowedConfigKey, config.ConfigName, config.ConfigPath, config.EnvPrefix)
-	configuration.InitLogger(viper.GetBool("LOGGER_PRODUCTION"))
+	helpers.InitializeConfig(config.AllowedConfigKey, config.ConfigName, config.ConfigPath, config.EnvPrefix)
+	helpers.InitLogger(viper.GetBool("LOGGER_PRODUCTION"))
 
 	// executor, _ := elasticsearch.NewEsExecutor(context.Background(), []string{""})
 	// bulkIngester := NewBulkIngester(executor)
@@ -47,7 +47,7 @@ func TestDirectBulkChainedUpdate(t *testing.T) {
 	indexingWorker := NewIndexingWorker(typedIngester, 1)
 	// indexingWorker := IndexingWorker{}
 
-	mergeConfig := merge.Config{Type: "document", Mode: merge.Self, ExistingAsMaster: true, Groups: []merge.Group{{FieldReplace: []string{"update"}}}}
+	mergeConfig := connector.Config{Type: "document", Mode: connector.Self, ExistingAsMaster: true, Groups: []connector.Group{{FieldReplace: []string{"update"}}}}
 	buffer := []UpdateCommand{
 		{
 			Index: "myindex", DocumentID: "1", DocumentType: "document", MergeConfig: mergeConfig,

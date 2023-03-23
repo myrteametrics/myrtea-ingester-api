@@ -12,7 +12,7 @@ require (
 	github.com/google/uuid v1.3.0
 	github.com/hashicorp/go-retryablehttp v0.7.2
 	github.com/json-iterator/go v1.1.12
-	github.com/myrteametrics/myrtea-sdk/v4 v4.1.11
+	github.com/myrteametrics/myrtea-sdk/v4 v4.2.11
 	github.com/olivere/elastic v6.2.16+incompatible
 	github.com/prometheus/client_golang v1.14.0
 	github.com/spf13/viper v1.3.1

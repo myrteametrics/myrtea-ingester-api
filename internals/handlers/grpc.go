@@ -5,8 +5,8 @@ import (
 	"fmt"
 
 	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/ingester"
-	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/merge"
 	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/protobuf/pb"
+	"github.com/myrteametrics/myrtea-sdk/v4/connector"
 	"github.com/myrteametrics/myrtea-sdk/v4/elasticsearch"
 	"github.com/myrteametrics/myrtea-sdk/v4/models"
 )
@@ -25,18 +25,18 @@ func NewIngesterServer() IngesterServer {
 
 func (s IngesterServer) Ingest(ctx context.Context, bir *pb.BulkIngestRequest) (*pb.BulkIngestResponse, error) {
 	fmt.Println("Ingest()")
-	mergeConfigs := make([]merge.Config, 0)
+	mergeConfigs := make([]connector.Config, 0)
 	for _, mergeConfig := range bir.GetMergeConfigs() {
-		groups := make([]merge.Group, 0)
+		groups := make([]connector.Group, 0)
 		for _, group := range mergeConfig.GetGroups() {
-			fieldMaths := make([]merge.FieldMath, 0)
+			fieldMaths := make([]connector.FieldMath, 0)
 			for _, fieldMath := range group.GetFieldMath() {
-				fieldMaths = append(fieldMaths, merge.FieldMath{
+				fieldMaths = append(fieldMaths, connector.FieldMath{
 					Expression:  fieldMath.GetExpression(),
 					OutputField: fieldMath.GetOutputField(),
 				})
 			}
-			groups = append(groups, merge.Group{
+			groups = append(groups, connector.Group{
 				Condition:             group.GetCondition(),
 				FieldReplace:          group.GetFieldReplace(),
 				FieldReplaceIfMissing: group.GetFieldReplaceIfMissing(),
@@ -48,8 +48,8 @@ func (s IngesterServer) Ingest(ctx context.Context, bir *pb.BulkIngestRequest) (
 			})
 		}
 
-		mergeConfigs = append(mergeConfigs, merge.Config{
-			Mode:             merge.Self, // mergeConfig.Mode
+		mergeConfigs = append(mergeConfigs, connector.Config{
+			Mode:             connector.Self, // mergeConfig.Mode
 			ExistingAsMaster: mergeConfig.GetExistingAsMaster(),
 			Type:             mergeConfig.GetType(),
 			LinkKey:          mergeConfig.GetLinkKey(),

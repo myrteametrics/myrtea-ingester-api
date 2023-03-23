@@ -10,8 +10,8 @@ import (
 
 	config "github.com/myrteametrics/myrtea-ingester-api/v5/internals/configuration"
 	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/routes"
-	"github.com/myrteametrics/myrtea-sdk/v4/configuration"
 	"github.com/myrteametrics/myrtea-sdk/v4/elasticsearch"
+	"github.com/myrteametrics/myrtea-sdk/v4/helpers"
 	"github.com/myrteametrics/myrtea-sdk/v4/router"
 	"github.com/myrteametrics/myrtea-sdk/v4/server"
 	"github.com/spf13/viper"
@@ -41,8 +41,8 @@ func main() {
 	hostname, _ := os.Hostname()
 	config.InitMetricLabels(hostname)
 
-	configuration.InitializeConfig(config.AllowedConfigKey, config.ConfigName, config.ConfigPath, config.EnvPrefix)
-	zapConfig := configuration.InitLogger(viper.GetBool("LOGGER_PRODUCTION"))
+	helpers.InitializeConfig(config.AllowedConfigKey, config.ConfigName, config.ConfigPath, config.EnvPrefix)
+	zapConfig := helpers.InitLogger(viper.GetBool("LOGGER_PRODUCTION"))
 
 	zap.L().Info("Starting Ingester-API...", zap.String("version", Version), zap.String("build_date", BuildDate))
 
