@@ -6,22 +6,19 @@ import (
 	"time"
 
 	ttlcache "github.com/myrteametrics/myrtea-sdk/v4/cache"
-	"github.com/myrteametrics/myrtea-sdk/v4/elasticsearch"
 	"go.uber.org/zap"
 )
 
 // BulkIngester is a component which split BulkIngestRequest and affect the resulting IngestRequests to dedicated TypedIngester
 // As a chokepoint, it doesn't do much processing and only acts as a request router
 type BulkIngester struct {
-	EsExecutor     *elasticsearch.EsExecutor
 	TypedIngesters map[string]*TypedIngester
 	Cache          *ttlcache.Cache
 }
 
 // NewBulkIngester returns a pointer to a new BulkIngester instance
-func NewBulkIngester(esExecutor *elasticsearch.EsExecutor) *BulkIngester {
+func NewBulkIngester() *BulkIngester {
 	return &BulkIngester{
-		EsExecutor:     esExecutor,
 		TypedIngesters: make(map[string]*TypedIngester),
 		Cache:          ttlcache.NewCache(3600 * time.Second),
 	}

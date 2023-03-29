@@ -7,7 +7,6 @@ import (
 	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/ingester"
 	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/protobuf/pb"
 	"github.com/myrteametrics/myrtea-sdk/v4/connector"
-	"github.com/myrteametrics/myrtea-sdk/v4/elasticsearch"
 	"github.com/myrteametrics/myrtea-sdk/v4/models"
 )
 
@@ -19,7 +18,7 @@ type IngesterServer struct {
 // NewIngesterServer returns a pointer to an IngesterHandler instance
 func NewIngesterServer() IngesterServer {
 	return IngesterServer{
-		bulkIngester: ingester.NewBulkIngester(elasticsearch.C()),
+		bulkIngester: ingester.NewBulkIngester(),
 	}
 }
 

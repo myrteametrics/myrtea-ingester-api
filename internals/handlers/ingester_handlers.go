@@ -5,7 +5,6 @@ import (
 	"net/http"
 
 	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/ingester"
-	"github.com/myrteametrics/myrtea-sdk/v4/elasticsearch"
 
 	"go.uber.org/zap"
 )
@@ -18,7 +17,7 @@ type IngesterHandler struct {
 // NewIngesterHandler returns a pointer to an IngesterHandler instance
 func NewIngesterHandler() *IngesterHandler {
 	return &IngesterHandler{
-		bulkIngester: ingester.NewBulkIngester(elasticsearch.C()),
+		bulkIngester: ingester.NewBulkIngester(),
 	}
 }
 

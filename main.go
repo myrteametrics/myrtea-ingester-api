@@ -8,9 +8,9 @@ import (
 	"syscall"
 	"time"
 
+	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/app"
 	config "github.com/myrteametrics/myrtea-ingester-api/v5/internals/configuration"
 	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/routes"
-	"github.com/myrteametrics/myrtea-sdk/v4/elasticsearch"
 	"github.com/myrteametrics/myrtea-sdk/v4/helpers"
 	"github.com/myrteametrics/myrtea-sdk/v4/router"
 	"github.com/myrteametrics/myrtea-sdk/v4/server"
@@ -47,19 +47,19 @@ func main() {
 	zap.L().Info("Starting Ingester-API...", zap.String("version", Version), zap.String("build_date", BuildDate))
 
 	zap.L().Info("Initialize Elasticsearch client...")
-	elasticsearch.ReplaceGlobals(&elasticsearch.Credentials{URLs: viper.GetStringSlice("ELASTICSEARCH_URLS")})
+	app.InitElasticsearch()
 	zap.L().Info("Initialize Elasticsearch client... Done")
 
-	serverPort := viper.GetInt("SERVER_PORT")
-	serverSecured := viper.GetBool("SERVER_ENABLE_TLS")
-	serverTLSCert := viper.GetString("SERVER_TLS_FILE_CRT")
-	serverTLSKey := viper.GetString("SERVER_TLS_FILE_KEY")
+	serverPort := viper.GetInt("HTTP_SERVER_PORT")
+	serverEnableTLS := viper.GetBool("HTTP_SERVER_ENABLE_TLS")
+	serverTLSCert := viper.GetString("HTTP_SERVER_TLS_FILE_CRT")
+	serverTLSKey := viper.GetString("HTTP_SERVER_TLS_FILE_KEY")
 
 	router := router.NewChiRouterSimple(router.ConfigSimple{
 		Production:              viper.GetBool("LOGGER_PRODUCTION"),
-		Security:                viper.GetBool("API_ENABLE_SECURITY"),
-		CORS:                    viper.GetBool("API_ENABLE_CORS"),
-		GatewayMode:             viper.GetBool("API_ENABLE_GATEWAY_MODE"),
+		CORS:                    viper.GetBool("HTTP_SERVER_API_ENABLE_CORS"),
+		Security:                viper.GetBool("HTTP_SERVER_API_ENABLE_SECURITY"),
+		GatewayMode:             viper.GetBool("HTTP_SERVER_API_ENABLE_GATEWAY_MODE"),
 		VerboseError:            false,
 		AuthenticationMode:      "BASIC",
 		LogLevel:                zapConfig.Level,
@@ -72,7 +72,7 @@ func main() {
 		},
 	})
 	var srv *http.Server
-	if serverSecured {
+	if serverEnableTLS {
 		srv = server.NewSecuredServer(serverPort, serverTLSCert, serverTLSKey, router)
 	} else {
 		srv = server.NewUnsecuredServer(serverPort, router)
@@ -83,7 +83,7 @@ func main() {
 
 	go func() {
 		var err error
-		if serverSecured {
+		if serverEnableTLS {
 			err = srv.ListenAndServeTLS(serverTLSCert, serverTLSKey)
 		} else {
 			err = srv.ListenAndServe()
