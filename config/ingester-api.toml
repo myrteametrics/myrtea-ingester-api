@@ -38,7 +38,7 @@ HTTP_SERVER_API_ENABLE_CORS = "true"
 # This JWT is delivered using the /login endpoint (which required a login and a password)
 # If HTTP_SERVER_API_ENABLE_SECURITY = false, no JWT is required and all endpoints can be called freely
 # Default value: "true"
-HTTP_SERVER_API_ENABLE_SECURITY = "true"
+HTTP_SERVER_API_ENABLE_SECURITY = "false"
 
 # Enable or disable API Gateway mode
 # If HTTP_SERVER_API_ENABLE_GATEWAY_MODE = true, the API will still required a JWT but no validation will be done on this JWT
@@ -71,7 +71,7 @@ SWAGGER_BASEPATH = "/api/v5"
 # Specify the elasticsearch URLS
 # Array of URLS might not work using environment variable (should be fixed soon)
 # Default value: 7
-ELASTICSEARCH_VERSION = 7
+ELASTICSEARCH_VERSION = 6
 
 # Specify the elasticsearch URLS
 # Array of URLS might not work using environment variable (should be fixed soon)

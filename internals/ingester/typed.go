@@ -27,7 +27,7 @@ type TypedIngester struct {
 	bulkIngester                  *BulkIngester
 	DocumentType                  string
 	Data                          chan *IngestRequest
-	Workers                       map[int]*IndexingWorker
+	Workers                       map[int]IndexingWorker
 	maxWorkers                    int
 	metricTypedIngesterQueueGauge metrics.Gauge
 }

@@ -7,6 +7,7 @@ import (
 	"github.com/elastic/go-elasticsearch/v6/esapi"
 	config "github.com/myrteametrics/myrtea-ingester-api/v5/internals/configuration"
 	"github.com/myrteametrics/myrtea-sdk/v4/connector"
+	"github.com/myrteametrics/myrtea-sdk/v4/elasticsearchv8"
 	"github.com/myrteametrics/myrtea-sdk/v4/helpers"
 	"github.com/myrteametrics/myrtea-sdk/v4/models"
 	"github.com/spf13/viper"
@@ -23,9 +24,9 @@ func TestDirectBulkChainedUpdate2(t *testing.T) {
 	indexingWorker := NewIndexingWorker(typedIngester, 1)
 	// indexingWorker := IndexingWorker{}
 
-	esapi.IndicesDeleteRequest{AllowNoIndices: esapi.BoolPtr(true), Index: []string{"myindex"}}.Do(context.Background(), indexingWorker.Client)
-	esapi.IndicesDeleteRequest{AllowNoIndices: esapi.BoolPtr(true), Index: []string{"myotherindex"}}.Do(context.Background(), indexingWorker.Client)
-	esapi.IndicesDeleteRequest{AllowNoIndices: esapi.BoolPtr(true), Index: []string{"myotherotherindex"}}.Do(context.Background(), indexingWorker.Client)
+	esapi.IndicesDeleteRequest{AllowNoIndices: esapi.BoolPtr(true), Index: []string{"myindex"}}.Do(context.Background(), elasticsearchv8.C())
+	esapi.IndicesDeleteRequest{AllowNoIndices: esapi.BoolPtr(true), Index: []string{"myotherindex"}}.Do(context.Background(), elasticsearchv8.C())
+	esapi.IndicesDeleteRequest{AllowNoIndices: esapi.BoolPtr(true), Index: []string{"myotherotherindex"}}.Do(context.Background(), elasticsearchv8.C())
 
 	docs := []models.Document{
 		{IndexType: "document", Index: "myindex", ID: "1", Source: map[string]interface{}{"a": "a", "b": "b"}},

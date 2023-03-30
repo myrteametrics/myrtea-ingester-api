@@ -21,7 +21,8 @@ func InitElasticsearch() {
 		fallthrough
 	case 8:
 		elasticsearchv8.ReplaceGlobals(elasticsearch.Config{
-			Addresses: urls,
+			Addresses:     urls,
+			EnableMetrics: true,
 		})
 	default:
 		zap.L().Fatal("Unsupported Elasticsearch version", zap.Int("version", version))
