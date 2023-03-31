@@ -17,6 +17,7 @@ import (
 
 // IndexingWorker is the unit of processing which can be started in parallel for elasticsearch ingestion
 type IndexingWorker interface {
+	Run()
 	GetMetricWorkerQueueGauge() metrics.Gauge
 	GetData() chan UpdateCommand
 }

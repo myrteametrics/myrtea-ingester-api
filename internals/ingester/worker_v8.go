@@ -199,19 +199,19 @@ func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]Updat
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	res, err := elasticsearchv8.C().Mget().Request(req).Do(ctx)
+	response, err := elasticsearchv8.C().Mget().Request(req).Do(ctx)
 	if err != nil {
 		zap.L().Warn("json encode source", zap.Error(err))
 	}
-	defer res.Body.Close()
-	if res.StatusCode > 299 {
-		zap.L().Error("mgetRequest failed", zap.Error(err))
-	}
+	// defer res.Body.Close()
+	// if res.StatusCode > 299 {
+	// 	zap.L().Error("mgetRequest failed", zap.Error(err))
+	// }
 
-	var response elasticsearchv8.MGetResponse
-	if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
-		zap.L().Error("parsing the response body", zap.Error(err))
-	}
+	// var response elasticsearchv8.MGetResponse
+	// if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
+	// 	zap.L().Error("parsing the response body", zap.Error(err))
+	// }
 	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("status", "done"))
 
 	if err != nil || response.Docs == nil || len(response.Docs) == 0 {
@@ -220,27 +220,33 @@ func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]Updat
 
 	refDocs := make([]models.Document, 0)
 	for i, d := range response.Docs {
-		data, err := jsoniter.Marshal(d.Source)
-		if err != nil {
-			zap.L().Error("update multiget unmarshal", zap.Error(err))
-		}
+		switch typedDoc := d.(type) {
+		case types.MultiGetError:
+		case types.GetResult:
 
-		var source map[string]interface{}
-		err = jsoniter.Unmarshal(data, &source)
-		if err != nil {
-			zap.L().Error("update multiget unmarshal", zap.Error(err))
-		}
-
-		if len(refDocs) > i && refDocs[i].ID == "" {
-			if d.Found {
-				refDocs[i] = models.Document{ID: d.ID, Index: d.Index, IndexType: "_doc", Source: source}
+			data, err := jsoniter.Marshal(typedDoc.Source_)
+			if err != nil {
+				zap.L().Error("update multiget unmarshal", zap.Error(err))
 			}
-		} else {
-			if d.Found {
-				refDocs = append(refDocs, models.Document{ID: d.ID, Index: d.Index, IndexType: "_doc", Source: source})
+
+			var source map[string]interface{}
+			err = jsoniter.Unmarshal(data, &source)
+			if err != nil {
+				zap.L().Error("update multiget unmarshal", zap.Error(err))
+			}
+
+			if len(refDocs) > i && refDocs[i].ID == "" {
+				if typedDoc.Found {
+					refDocs[i] = models.Document{ID: typedDoc.Id_, Index: typedDoc.Index_, IndexType: "_doc", Source: source}
+				}
 			} else {
-				refDocs = append(refDocs, models.Document{})
+				if typedDoc.Found {
+					refDocs = append(refDocs, models.Document{ID: typedDoc.Id_, Index: typedDoc.Index_, IndexType: "_doc", Source: source})
+				} else {
+					refDocs = append(refDocs, models.Document{})
+				}
 			}
+
 		}
 	}
 
@@ -336,26 +342,30 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsFull(indices []string, docs [
 		// zap.L().Info("multiGetFindRefDocsFull", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("index", index), zap.String("step", "loop docs"))
 
 		for i, d := range responseDocs {
-			data, err := jsoniter.Marshal(d.Source)
-			if err != nil {
-				zap.L().Error("update multiget unmarshal", zap.Error(err))
-			}
-
-			var source map[string]interface{}
-			err = jsoniter.Unmarshal(data, &source)
-			if err != nil {
-				zap.L().Error("update multiget unmarshal", zap.Error(err))
-			}
-
-			if len(refDocs) > i && refDocs[i].ID == "" {
-				if d.Found {
-					refDocs[i] = *models.NewDocument(d.ID, d.Index, "_doc", source)
+			switch typedDoc := d.(type) {
+			case types.MultiGetError:
+			case types.GetResult:
+				data, err := jsoniter.Marshal(typedDoc.Source_)
+				if err != nil {
+					zap.L().Error("update multiget unmarshal", zap.Error(err))
 				}
-			} else {
-				if d.Found {
-					refDocs = append(refDocs, *models.NewDocument(d.ID, d.Index, "_doc", source))
+
+				var source map[string]interface{}
+				err = jsoniter.Unmarshal(data, &source)
+				if err != nil {
+					zap.L().Error("update multiget unmarshal", zap.Error(err))
+				}
+
+				if len(refDocs) > i && refDocs[i].ID == "" {
+					if typedDoc.Found {
+						refDocs[i] = *models.NewDocument(typedDoc.Id_, typedDoc.Index_, "_doc", source)
+					}
 				} else {
-					refDocs = append(refDocs, models.Document{})
+					if typedDoc.Found {
+						refDocs = append(refDocs, *models.NewDocument(typedDoc.Id_, typedDoc.Index_, "_doc", source))
+					} else {
+						refDocs = append(refDocs, models.Document{})
+					}
 				}
 			}
 		}
@@ -363,7 +373,7 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsFull(indices []string, docs [
 	return refDocs, nil
 }
 
-func (worker *IndexingWorkerV8) multiGetFindRefDocs(index string, queries []GetQuery) ([]elasticsearchv8.MGetResponseItem, error) {
+func (worker *IndexingWorkerV8) multiGetFindRefDocs(index string, queries []GetQuery) ([]types.ResponseItem, error) {
 	if len(queries) == 0 {
 		return nil, errors.New("docs[] is empty")
 	}
@@ -382,25 +392,25 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocs(index string, queries []GetQ
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	res, err := elasticsearchv8.C().Mget().Index(index).Request(req).Do(ctx)
+	response, err := elasticsearchv8.C().Mget().Index(index).Request(req).Do(ctx)
 	if err != nil {
 		zap.L().Warn("json encode source", zap.Error(err))
 	}
-	defer res.Body.Close()
-	if res.StatusCode > 299 {
-		zap.L().Error("mgetRequest failed", zap.Error(err))
-	}
+	// defer res.Body.Close()
+	// if res.StatusCode > 299 {
+	// 	zap.L().Error("mgetRequest failed", zap.Error(err))
+	// }
 
-	var response elasticsearchv8.MGetResponse
-	if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
-		zap.L().Error("parsing the response body", zap.Error(err))
-		return make([]elasticsearchv8.MGetResponseItem, 0), err
-	}
+	// var response elasticsearchv8.MGetResponse
+	// if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
+	// 	zap.L().Error("parsing the response body", zap.Error(err))
+	// 	return make([]elasticsearchv8.MGetResponseItem, 0), err
+	// }
 	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("index", index), zap.String("status", "done"))
 
 	if err != nil || response.Docs == nil || len(response.Docs) == 0 {
 		zap.L().Error("MultiGet (self)", zap.Error(err))
-		return make([]elasticsearchv8.MGetResponseItem, 0), err
+		return make([]types.ResponseItem, 0), err
 	}
 	return response.Docs, nil
 }

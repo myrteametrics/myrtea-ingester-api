@@ -21,7 +21,7 @@ func TestDirectBulkChainedUpdate2(t *testing.T) {
 	// bulkIngester := NewBulkIngester(executor)
 	// typedIngester := NewTypedIngester(bulkIngester, "document")
 	typedIngester := &TypedIngester{DocumentType: "document"}
-	indexingWorker := NewIndexingWorker(typedIngester, 1)
+	indexingWorker := NewIndexingWorkerV6(typedIngester, 1)
 	// indexingWorker := IndexingWorker{}
 
 	esapi.IndicesDeleteRequest{AllowNoIndices: esapi.BoolPtr(true), Index: []string{"myindex"}}.Do(context.Background(), elasticsearchv8.C())
@@ -45,7 +45,7 @@ func TestDirectBulkChainedUpdate(t *testing.T) {
 	// bulkIngester := NewBulkIngester(executor)
 	// typedIngester := NewTypedIngester(bulkIngester, "document")
 	typedIngester := &TypedIngester{DocumentType: "document"}
-	indexingWorker := NewIndexingWorker(typedIngester, 1)
+	indexingWorker := NewIndexingWorkerV6(typedIngester, 1)
 	// indexingWorker := IndexingWorker{}
 
 	mergeConfig := connector.Config{Type: "document", Mode: connector.Self, ExistingAsMaster: true, Groups: []connector.Group{{FieldReplace: []string{"update"}}}}
