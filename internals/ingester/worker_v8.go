@@ -203,15 +203,6 @@ func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]Updat
 	if err != nil {
 		zap.L().Warn("json encode source", zap.Error(err))
 	}
-	// defer res.Body.Close()
-	// if res.StatusCode > 299 {
-	// 	zap.L().Error("mgetRequest failed", zap.Error(err))
-	// }
-
-	// var response elasticsearchv8.MGetResponse
-	// if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
-	// 	zap.L().Error("parsing the response body", zap.Error(err))
-	// }
 	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("status", "done"))
 
 	if err != nil || response.Docs == nil || len(response.Docs) == 0 {
@@ -396,16 +387,7 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocs(index string, queries []GetQ
 	if err != nil {
 		zap.L().Warn("json encode source", zap.Error(err))
 	}
-	// defer res.Body.Close()
-	// if res.StatusCode > 299 {
-	// 	zap.L().Error("mgetRequest failed", zap.Error(err))
-	// }
 
-	// var response elasticsearchv8.MGetResponse
-	// if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
-	// 	zap.L().Error("parsing the response body", zap.Error(err))
-	// 	return make([]elasticsearchv8.MGetResponseItem, 0), err
-	// }
 	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("index", index), zap.String("status", "done"))
 
 	if err != nil || response.Docs == nil || len(response.Docs) == 0 {
