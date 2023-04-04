@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-kit/kit/metrics"
 	"github.com/go-kit/kit/metrics/prometheus"
+	"github.com/google/uuid"
 	config "github.com/myrteametrics/myrtea-ingester-api/v5/internals/configuration"
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/viper"
@@ -22,10 +23,11 @@ import (
 // TypedIngester is a component which process IngestRequest
 // It generates UpdateCommand which are processed by the attached IndexingWorker's
 type TypedIngester struct {
+	Uuid                          uuid.UUID
 	bulkIngester                  *BulkIngester
 	DocumentType                  string
 	Data                          chan *IngestRequest
-	Workers                       map[int]*IndexingWorker
+	Workers                       map[int]IndexingWorker
 	maxWorkers                    int
 	metricTypedIngesterQueueGauge metrics.Gauge
 }
@@ -43,17 +45,21 @@ var (
 func NewTypedIngester(bulkIngester *BulkIngester, documentType string) *TypedIngester {
 
 	ingester := TypedIngester{
+		Uuid:                          uuid.New(),
 		bulkIngester:                  bulkIngester,
 		DocumentType:                  documentType,
 		Data:                          make(chan *IngestRequest, viper.GetInt("TYPEDINGESTER_QUEUE_BUFFER_SIZE")),
-		Workers:                       make(map[int]*IndexingWorker),
+		Workers:                       make(map[int]IndexingWorker),
 		maxWorkers:                    viper.GetInt("INGESTER_MAXIMUM_WORKERS"),
 		metricTypedIngesterQueueGauge: _metricTypedIngesterQueueGauge.With("typedingester", documentType),
 	}
 	_metricTypedIngesterQueueGauge.With("typedingester", documentType).Set(0)
 
 	for i := 0; i < ingester.maxWorkers; i++ {
-		worker := NewIndexingWorker(&ingester, i)
+		worker, err := NewIndexingWorker(&ingester, i)
+		if err != nil {
+
+		}
 		ingester.Workers[i] = worker
 		go worker.Run()
 		time.Sleep(10 * time.Millisecond) // goroutine warm-up
@@ -81,10 +87,10 @@ func (ingester *TypedIngester) Run() {
 
 		workerID := getWorker(ir.Doc.ID, ingester.maxWorkers)
 		worker := ingester.Workers[workerID]
-		updateCommand := NewUpdateCommand(ir.Doc.ID, ir.DocumentType, ir.Doc, ir.MergeConfig)
-		zap.L().Debug("Send UpdateCommand", zap.String("IngesterType", ingester.DocumentType), zap.Int("WorkerID", workerID), zap.Any("updateCommand", updateCommand), zap.Any("len(chan)", len(ingester.Workers[workerID].Data)))
+		updateCommand := NewUpdateCommand(ir.Doc.Index, ir.Doc.ID, ir.DocumentType, ir.Doc, ir.MergeConfig)
+		zap.L().Debug("Send UpdateCommand", zap.String("IngesterType", ingester.DocumentType), zap.Int("WorkerID", workerID), zap.Any("updateCommand", updateCommand), zap.Any("len(chan)", len(ingester.Workers[workerID].GetData())))
 
-		worker.Data <- updateCommand
+		worker.GetData() <- updateCommand
 
 		ingester.metricTypedIngesterQueueGauge.Set(float64(len(ingester.Data)))
 	}
