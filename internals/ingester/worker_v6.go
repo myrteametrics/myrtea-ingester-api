@@ -5,7 +5,6 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
-	"log"
 	"strconv"
 	"time"
 
@@ -13,11 +12,9 @@ import (
 	"github.com/elastic/go-elasticsearch/v6/esapi"
 	"github.com/go-kit/kit/metrics"
 	"github.com/google/uuid"
-	"github.com/hashicorp/go-retryablehttp"
 	jsoniter "github.com/json-iterator/go"
 	"github.com/myrteametrics/myrtea-sdk/v4/index"
 	"github.com/myrteametrics/myrtea-sdk/v4/models"
-	"github.com/myrteametrics/myrtea-sdk/v4/utils"
 	"github.com/olivere/elastic"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
@@ -52,23 +49,6 @@ func NewIndexingWorkerV6(typedIngester *TypedIngester, id int) *IndexingWorkerV6
 	// } else {
 	// 	zap.L().Info("Initialize Elasticsearch client", zap.String("status", "done"))
 	// }
-
-	var zapDebugConfig zap.Config
-	if viper.GetBool("LOGGER_PRODUCTION") {
-		zapDebugConfig = zap.NewProductionConfig()
-	} else {
-		zapDebugConfig = zap.NewDevelopmentConfig()
-	}
-	zapDebugConfig.Level.SetLevel(zap.DebugLevel)
-	zapDebugLogger, err := zapDebugConfig.Build(zap.AddStacktrace(zap.PanicLevel))
-	if err != nil {
-		log.Fatalf("can't initialize zap logger: %v", err)
-	}
-	defer zapDebugLogger.Sync()
-
-	retryClient := retryablehttp.NewClient()
-	retryClient.HTTPClient.Timeout = viper.GetDuration("ELASTICSEARCH_HTTP_TIMEOUT")
-	retryClient.Logger = utils.NewZapLeveledLogger(zapDebugLogger)
 
 	cfg := goelasticsearch.Config{
 		Addresses:     viper.GetStringSlice("ELASTICSEARCH_URLS"),
