@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"reflect"
 	"strconv"
 	"time"
 
@@ -212,32 +213,50 @@ func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]Updat
 	refDocs := make([]models.Document, 0)
 	for i, d := range response.Docs {
 		switch typedDoc := d.(type) {
-		case types.MultiGetError:
-		case types.GetResult:
+		// case types.MultiGetError:
+		//     not working :(
 
-			data, err := jsoniter.Marshal(typedDoc.Source_)
+		// case types.GetResult:
+		//     not working :(
+
+		case map[string]interface{}:
+			jsonString, err := json.Marshal(typedDoc)
 			if err != nil {
 				zap.L().Error("update multiget unmarshal", zap.Error(err))
+				continue
+			}
+
+			var typedDocOk types.GetResult
+			err = json.Unmarshal(jsonString, &typedDocOk)
+			if err != nil {
+				zap.L().Error("update multiget unmarshal", zap.Error(err))
+				continue
+			}
+			if len(typedDocOk.Source_) == 0 {
+				// no source => MultiGetError
+				continue
 			}
 
 			var source map[string]interface{}
-			err = jsoniter.Unmarshal(data, &source)
+			err = jsoniter.Unmarshal(typedDocOk.Source_, &source)
 			if err != nil {
 				zap.L().Error("update multiget unmarshal", zap.Error(err))
+				continue
 			}
 
 			if len(refDocs) > i && refDocs[i].ID == "" {
-				if typedDoc.Found {
-					refDocs[i] = models.Document{ID: typedDoc.Id_, Index: typedDoc.Index_, IndexType: "_doc", Source: source}
+				if typedDocOk.Found {
+					refDocs[i] = models.Document{ID: typedDocOk.Id_, Index: typedDocOk.Index_, IndexType: "_doc", Source: source}
 				}
 			} else {
-				if typedDoc.Found {
-					refDocs = append(refDocs, models.Document{ID: typedDoc.Id_, Index: typedDoc.Index_, IndexType: "_doc", Source: source})
+				if typedDocOk.Found {
+					refDocs = append(refDocs, models.Document{ID: typedDocOk.Id_, Index: typedDocOk.Index_, IndexType: "_doc", Source: source})
 				} else {
 					refDocs = append(refDocs, models.Document{})
 				}
 			}
-
+		default:
+			zap.L().Error("Unkwown response type", zap.Any("typedDoc", typedDoc), zap.Any("type", reflect.TypeOf(typedDoc)))
 		}
 	}
 
@@ -498,11 +517,13 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 
 	zap.L().Debug("Executing bulkindex", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("status", "done"))
 
+	// var r map[string]interface{}
 	var r elasticsearchv8.BulkIndexResponse
 	if err := json.NewDecoder(res.Body).Decode(&r); err != nil {
 		zap.L().Error("decode bulk response", zap.Error(err))
 		return err
 	}
+	// zap.L().Info("response", zap.Any("r", r))
 	if len(r.Failed()) > 0 {
 		zap.L().Error("Error during bulkIndex", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID))
 		return errors.New("bulkindex failed > 0")
