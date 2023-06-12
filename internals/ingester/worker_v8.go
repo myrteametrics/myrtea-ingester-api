@@ -223,6 +223,7 @@ func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]Updat
 			jsonString, err := json.Marshal(typedDoc)
 			if err != nil {
 				zap.L().Error("update multiget unmarshal", zap.Error(err))
+				refDocs = append(refDocs, models.Document{})
 				continue
 			}
 
@@ -230,10 +231,12 @@ func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]Updat
 			err = json.Unmarshal(jsonString, &typedDocOk)
 			if err != nil {
 				zap.L().Error("update multiget unmarshal", zap.Error(err))
+				refDocs = append(refDocs, models.Document{})
 				continue
 			}
 			if len(typedDocOk.Source_) == 0 {
 				// no source => MultiGetError
+				refDocs = append(refDocs, models.Document{})
 				continue
 			}
 
@@ -241,20 +244,27 @@ func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]Updat
 			err = jsoniter.Unmarshal(typedDocOk.Source_, &source)
 			if err != nil {
 				zap.L().Error("update multiget unmarshal", zap.Error(err))
+				refDocs = append(refDocs, models.Document{})
 				continue
 			}
 
-			if len(refDocs) > i && refDocs[i].ID == "" {
-				if typedDocOk.Found {
-					refDocs[i] = models.Document{ID: typedDocOk.Id_, Index: typedDocOk.Index_, IndexType: "_doc", Source: source}
-				}
+			if typedDocOk.Found {
+				refDocs = append(refDocs, models.Document{ID: typedDocOk.Id_, Index: typedDocOk.Index_, IndexType: "_doc", Source: source})
 			} else {
-				if typedDocOk.Found {
-					refDocs = append(refDocs, models.Document{ID: typedDocOk.Id_, Index: typedDocOk.Index_, IndexType: "_doc", Source: source})
-				} else {
-					refDocs = append(refDocs, models.Document{})
-				}
+				refDocs = append(refDocs, models.Document{})
 			}
+
+			// if len(refDocs) > i && refDocs[i].ID == "" {
+			// 	if typedDocOk.Found {
+			// 		refDocs[i] = models.Document{ID: typedDocOk.Id_, Index: typedDocOk.Index_, IndexType: "_doc", Source: source}
+			// 	}
+			// } else {
+			// 	if typedDocOk.Found {
+			// 		refDocs = append(refDocs, models.Document{ID: typedDocOk.Id_, Index: typedDocOk.Index_, IndexType: "_doc", Source: source})
+			// 	} else {
+			// 		refDocs = append(refDocs, models.Document{})
+			// 	}
+			// }
 		default:
 			zap.L().Error("Unkwown response type", zap.Any("typedDoc", typedDoc), zap.Any("type", reflect.TypeOf(typedDoc)))
 		}
@@ -352,6 +362,7 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsFull(indices []string, docs [
 		// zap.L().Info("multiGetFindRefDocsFull", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("index", index), zap.String("step", "loop docs"))
 
 		for i, d := range responseDocs {
+			// FIXME: see directMultiGetDocs()
 			switch typedDoc := d.(type) {
 			case types.MultiGetError:
 			case types.GetResult:
