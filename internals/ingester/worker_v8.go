@@ -211,7 +211,7 @@ func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]Updat
 	}
 
 	refDocs := make([]models.Document, 0)
-	for i, d := range response.Docs {
+	for _, d := range response.Docs {
 		switch typedDoc := d.(type) {
 		// case types.MultiGetError:
 		//     not working :(
