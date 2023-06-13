@@ -9,7 +9,7 @@ DEBUG_MODE = "false"
 
 # Enable or disable production log
 # Default value: true
-LOGGER_PRODUCTION = "true"
+LOGGER_PRODUCTION = "false"
 
 # Specify the server running port. API (including swagger) will be reachable through this port
 # Default value: "9001"
@@ -86,7 +86,7 @@ ELASTICSEARCH_DIRECT_MULTI_GET_MODE = "false"
 
 # Specify the maximum number of concurrent worker by type of ingested document (1 type of document = n workers)
 # Default value: 2
-INGESTER_MAXIMUM_WORKERS = "2"
+INGESTER_MAXIMUM_WORKERS = "1"
 
 # Specify the typed-ingesters maximum queue size
 # Default value: "5000"
