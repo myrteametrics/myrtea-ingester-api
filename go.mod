@@ -8,10 +8,10 @@ require (
 	github.com/elastic/go-elasticsearch/v8 v8.7.0
 	github.com/go-chi/chi v4.1.2+incompatible
 	github.com/go-kit/kit v0.12.0
-	github.com/golang/protobuf v1.5.2
+	github.com/golang/protobuf v1.5.3
 	github.com/google/uuid v1.3.0
 	github.com/json-iterator/go v1.1.12
-	github.com/myrteametrics/myrtea-sdk/v4 v4.3.0
+	github.com/myrteametrics/myrtea-sdk/v4 v4.3.6
 	github.com/olivere/elastic v6.2.16+incompatible
 	github.com/prometheus/client_golang v1.14.0
 	github.com/spf13/viper v1.3.1
@@ -94,10 +94,10 @@ require (
 	go.uber.org/atomic v1.9.0 // indirect
 	go.uber.org/multierr v1.8.0 // indirect
 	golang.org/x/crypto v0.0.0-20220722155217-630584e8d5aa // indirect
-	golang.org/x/net v0.4.0 // indirect
-	golang.org/x/sys v0.3.0 // indirect
-	golang.org/x/text v0.5.0 // indirect
-	golang.org/x/tools v0.1.12 // indirect
+	golang.org/x/net v0.10.0 // indirect
+	golang.org/x/sys v0.8.0 // indirect
+	golang.org/x/text v0.9.0 // indirect
+	golang.org/x/tools v0.9.1 // indirect
 	google.golang.org/genproto v0.0.0-20210917145530-b395a37504d4 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
 )
