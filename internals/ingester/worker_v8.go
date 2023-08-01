@@ -9,7 +9,7 @@ import (
 	"strconv"
 	"time"
 
-	"github.com/elastic/go-elasticsearch/v6/esapi"
+	"github.com/elastic/go-elasticsearch/v8/esapi"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/core/mget"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/some"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
@@ -534,10 +534,69 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 		zap.L().Error("decode bulk response", zap.Error(err))
 		return err
 	}
+
 	// zap.L().Info("response", zap.Any("r", r))
 	if len(r.Failed()) > 0 {
-		zap.L().Error("Error during bulkIndex", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID))
+		zap.L().Warn("Error during bulkIndex", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Docs", len(docs)), zap.Int("Errors", len(r.Failed())))
+		if len(r.Items) > 0 {
+			zap.L().Warn("Error item sample", zap.Any("response", r.Items[0]))
+		}
+		errorsMap := make(map[string]int64)
+		for _, item := range r.Items {
+			if _, found := errorsMap[item["index"].Error.Type]; found {
+				errorsMap[item["index"].Error.Type] += 1
+			} else {
+				errorsMap[item["index"].Error.Type] = 1
+			}
+		}
+		zap.L().Warn("Error typology mapping", zap.Any("errors", errorsMap))
 		return errors.New("bulkindex failed > 0")
 	}
 	return nil
 }
+
+// func (worker *IndexingWorkerV8) bulkIndexNew(docs []models.Document) error {
+
+// 	client := &elasticsearch.Client{
+// 		BaseClient: elasticsearchv8.C().BaseClient,
+// 	}
+// 	client.API = esapi.New(client)
+
+// 	bulkIndexer, err := esutil.NewBulkIndexer(esutil.BulkIndexerConfig{
+// 		Client: client,
+// 	})
+// 	if err != nil {
+// 		return err
+// 	}
+
+// 	for _, doc := range docs {
+// 		sourceStr, err := json.Marshal(doc.Source)
+// 		if err != nil {
+// 			return err
+// 		}
+// 		err = bulkIndexer.Add(context.Background(), esutil.BulkIndexerItem{
+// 			Index:      doc.Index,
+// 			DocumentID: doc.ID,
+// 			Body:       bytes.NewReader(sourceStr),
+// 			// OnSuccess: func(ctx context.Context, item esutil.BulkIndexerItem, res esutil.BulkIndexerResponseItem) {
+// 			// 	fmt.Printf("[%d] %s test/%s", res.Status, res.Result, item.DocumentID)
+// 			// },
+// 			OnFailure: func(ctx context.Context, item esutil.BulkIndexerItem, res esutil.BulkIndexerResponseItem, err error) {
+// 				if err != nil {
+// 					zap.L().Warn("Fail to index document to elasticsearch", zap.Error(err))
+// 				} else {
+// 					zap.L().Warn("Fail to index document to elasticsearch",
+// 						zap.String("errorType", res.Error.Type),
+// 						zap.String("errorReason", res.Error.Reason))
+// 				}
+// 			},
+// 		})
+// 		if err != nil {
+// 			return err
+// 		}
+// 	}
+
+// 	err = bulkIndexer.Close(context.Background())
+
+// 	zap.L().Info("bulk", zap.Any("stats", bulkIndexer.Stats()))
+// }
