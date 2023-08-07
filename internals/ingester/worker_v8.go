@@ -363,32 +363,82 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsFull(indices []string, docs [
 
 		for i, d := range responseDocs {
 			// FIXME: see directMultiGetDocs()
+			_ = i
 			switch typedDoc := d.(type) {
-			case types.MultiGetError:
-			case types.GetResult:
-				data, err := jsoniter.Marshal(typedDoc.Source_)
+			// case types.MultiGetError:
+			// case types.GetResult:
+			// 	data, err := jsoniter.Marshal(typedDoc.Source_)
+			// 	if err != nil {
+			// 		zap.L().Error("update multiget unmarshal", zap.Error(err))
+			// 	}
+
+			// 	var source map[string]interface{}
+			// 	err = jsoniter.Unmarshal(data, &source)
+			// 	if err != nil {
+			// 		zap.L().Error("update multiget unmarshal", zap.Error(err))
+			// 	}
+
+			// 	if len(refDocs) > i && refDocs[i].ID == "" {
+			// 		if typedDoc.Found {
+			// 			refDocs[i] = *models.NewDocument(typedDoc.Id_, typedDoc.Index_, "_doc", source)
+			// 		}
+			// 	} else {
+			// 		if typedDoc.Found {
+			// 			refDocs = append(refDocs, *models.NewDocument(typedDoc.Id_, typedDoc.Index_, "_doc", source))
+			// 		} else {
+			// 			refDocs = append(refDocs, models.Document{})
+			// 		}
+			// 	}
+			case map[string]interface{}:
+				jsonString, err := json.Marshal(typedDoc)
 				if err != nil {
 					zap.L().Error("update multiget unmarshal", zap.Error(err))
+					refDocs = append(refDocs, models.Document{})
+					continue
+				}
+
+				var typedDocOk types.GetResult
+				err = json.Unmarshal(jsonString, &typedDocOk)
+				if err != nil {
+					zap.L().Error("update multiget unmarshal", zap.Error(err))
+					refDocs = append(refDocs, models.Document{})
+					continue
+				}
+				if len(typedDocOk.Source_) == 0 {
+					// no source => MultiGetError
+					refDocs = append(refDocs, models.Document{})
+					continue
 				}
 
 				var source map[string]interface{}
-				err = jsoniter.Unmarshal(data, &source)
+				err = jsoniter.Unmarshal(typedDocOk.Source_, &source)
 				if err != nil {
 					zap.L().Error("update multiget unmarshal", zap.Error(err))
+					refDocs = append(refDocs, models.Document{})
+					continue
 				}
 
-				if len(refDocs) > i && refDocs[i].ID == "" {
-					if typedDoc.Found {
-						refDocs[i] = *models.NewDocument(typedDoc.Id_, typedDoc.Index_, "_doc", source)
-					}
+				if typedDocOk.Found {
+					refDocs = append(refDocs, models.Document{ID: typedDocOk.Id_, Index: typedDocOk.Index_, IndexType: "_doc", Source: source})
 				} else {
-					if typedDoc.Found {
-						refDocs = append(refDocs, *models.NewDocument(typedDoc.Id_, typedDoc.Index_, "_doc", source))
-					} else {
-						refDocs = append(refDocs, models.Document{})
-					}
+					refDocs = append(refDocs, models.Document{})
 				}
+
+				// if len(refDocs) > i && refDocs[i].ID == "" {
+				// 	if typedDocOk.Found {
+				// 		refDocs[i] = models.Document{ID: typedDocOk.Id_, Index: typedDocOk.Index_, IndexType: "_doc", Source: source}
+				// 	}
+				// } else {
+				// 	if typedDocOk.Found {
+				// 		refDocs = append(refDocs, models.Document{ID: typedDocOk.Id_, Index: typedDocOk.Index_, IndexType: "_doc", Source: source})
+				// 	} else {
+				// 		refDocs = append(refDocs, models.Document{})
+				// 	}
+				// }
+			default:
+				zap.L().Error("Unkwown response type", zap.Any("typedDoc", typedDoc), zap.Any("type", reflect.TypeOf(typedDoc)))
 			}
+
 		}
 	}
 	return refDocs, nil
@@ -434,15 +484,20 @@ func (worker *IndexingWorkerV8) applyMerges(documents [][]UpdateCommand, refDocs
 		var doc models.Document
 		if len(refDocs) > i {
 			doc = refDocs[i]
+			if doc.Index == "" {
+				doc.ID = commands[0].DocumentID
+				doc.Index = buildAliasName(commands[0].DocumentType, index.Last)
+			}
 		}
 
 		// Index setup should probably not be here (be before in the indexing chain)
 		for _, command := range commands {
-			if command.NewDoc.Index == "" {
-				command.NewDoc.Index = buildAliasName(command.DocumentType, index.Last)
-			}
+			// if command.NewDoc.Index == "" {
+			// 	command.NewDoc.Index = buildAliasName(command.DocumentType, index.Last)
+			// }
 			doc = ApplyMergeLight(doc, command)
 		}
+
 		doc.IndexType = "document"
 		push = append(push, doc)
 		i++ // synchronise map iteration with reponse.Docs
