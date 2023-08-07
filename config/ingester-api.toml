@@ -71,7 +71,7 @@ SWAGGER_BASEPATH = "/api/v5"
 # Specify the elasticsearch URLS
 # Array of URLS might not work using environment variable (should be fixed soon)
 # Default value: 7
-ELASTICSEARCH_VERSION = 6
+ELASTICSEARCH_VERSION = 7
 
 # Specify the elasticsearch URLS
 # Array of URLS might not work using environment variable (should be fixed soon)
