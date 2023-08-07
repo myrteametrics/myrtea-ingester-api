@@ -11,7 +11,7 @@ require (
 	github.com/golang/protobuf v1.5.3
 	github.com/google/uuid v1.3.0
 	github.com/json-iterator/go v1.1.12
-	github.com/myrteametrics/myrtea-sdk/v4 v4.3.6
+	github.com/myrteametrics/myrtea-sdk/v4 v4.3.8
 	github.com/olivere/elastic v6.2.16+incompatible
 	github.com/prometheus/client_golang v1.14.0
 	github.com/spf13/viper v1.3.1
@@ -79,6 +79,7 @@ require (
 	github.com/pelletier/go-toml v1.2.0 // indirect
 	github.com/pierrec/lz4/v4 v4.1.17 // indirect
 	github.com/pkg/errors v0.9.1 // indirect
+	github.com/pmezard/go-difflib v1.0.0 // indirect
 	github.com/prometheus/client_model v0.3.0 // indirect
 	github.com/prometheus/common v0.37.0 // indirect
 	github.com/prometheus/procfs v0.8.0 // indirect
@@ -89,6 +90,8 @@ require (
 	github.com/spf13/cast v1.3.0 // indirect
 	github.com/spf13/jwalterweatherman v1.0.0 // indirect
 	github.com/spf13/pflag v1.0.3 // indirect
+	github.com/stretchr/objx v0.5.0 // indirect
+	github.com/stretchr/testify v1.8.4 // indirect
 	github.com/swaggo/files v0.0.0-20220610200504-28940afbdbfe // indirect
 	github.com/swaggo/http-swagger v1.3.3 // indirect
 	go.uber.org/atomic v1.9.0 // indirect
@@ -100,4 +103,5 @@ require (
 	golang.org/x/tools v0.9.1 // indirect
 	google.golang.org/genproto v0.0.0-20210917145530-b395a37504d4 // indirect
 	gopkg.in/yaml.v2 v2.4.0 // indirect
+	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
