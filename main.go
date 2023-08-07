@@ -41,7 +41,7 @@ func main() {
 	hostname, _ := os.Hostname()
 	config.InitMetricLabels(hostname)
 
-	helpers.InitializeConfig(config.AllowedConfigKey, config.ConfigName, config.ConfigPath, config.EnvPrefix)
+	helpers.InitializeConfig(config.GetAllowedConfigKey(), config.ConfigName, config.ConfigPath, config.EnvPrefix)
 	zapConfig := helpers.InitLogger(viper.GetBool("LOGGER_PRODUCTION"))
 
 	zap.L().Info("Starting Ingester-API...", zap.String("version", Version), zap.String("build_date", BuildDate))
