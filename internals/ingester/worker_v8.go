@@ -478,9 +478,12 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocs(index string, queries []GetQ
 }
 
 func (worker *IndexingWorkerV8) applyMerges(documents [][]UpdateCommand, refDocs []models.Document) ([]models.Document, error) {
-	var push = make([]models.Document, 0)
-	var i int
-	for _, commands := range documents {
+	if len(documents) != len(refDocs) {
+		zap.L().Warn("Inconsistent merge with different slice size")
+	}
+
+	push := make([]models.Document, 0)
+	for i, commands := range documents {
 		var doc models.Document
 		if len(refDocs) > i {
 			doc = refDocs[i]
@@ -500,7 +503,6 @@ func (worker *IndexingWorkerV8) applyMerges(documents [][]UpdateCommand, refDocs
 
 		doc.IndexType = "document"
 		push = append(push, doc)
-		i++ // synchronise map iteration with reponse.Docs
 	}
 	return push, nil
 }
