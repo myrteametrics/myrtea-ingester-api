@@ -123,6 +123,7 @@ func (getQuery *GetQuery) convertToExecutor() models.Document {
 }
 
 func buildAliasName(documentType string, depth index.Depth) string {
+	//fmt.Println(documentType, depth, strings.ToLower(depth.String()))
 	access := fmt.Sprintf("%s-%s-%s", viper.GetString("INSTANCE_NAME"), documentType, strings.ToLower(depth.String()))
 	return access
 }

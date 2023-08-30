@@ -5,6 +5,7 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	// "fmt"
 	"reflect"
 	"strconv"
 	"time"
@@ -315,14 +316,17 @@ func (worker *IndexingWorkerV8) bulkChainedUpdate(updateCommandGroups [][]Update
 }
 
 func (worker *IndexingWorkerV8) getIndices(documentType string) ([]string, error) {
-	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+	ctx, cancel := context.WithTimeout(context.Background(), 10*time.Second)
 	defer cancel()
 
 	alias := buildAliasName(documentType, index.Patch)
 
-	res, err := esapi.IndicesGetAliasRequest{Name: []string{alias}}.Do(ctx, elasticsearchv8.C())
+	zap.L().Info("Alias", zap.String("",alias))
+	req := esapi.IndicesGetAliasRequest{Name: []string{alias}}
+	//fmt.Println("req", req)
+	res, err := req.Do(ctx, elasticsearchv8.C())
 	if err != nil {
-		zap.L().Error("", zap.Error(err))
+		zap.L().Error("Get Alias request", zap.Error(err))
 		return make([]string, 0), errors.New("alias not found")
 
 	}
