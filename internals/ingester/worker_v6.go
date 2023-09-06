@@ -34,10 +34,6 @@ type IndexingWorkerV6 struct {
 	metricWorkerFlushDuration metrics.Histogram
 }
 
-type BulkResponse struct {
-	Items []map[string]map[string]interface{} `json:"items"`
-}
-
 // NewIndexingWorkerV6 returns a new IndexingWorkerV6
 func NewIndexingWorkerV6(typedIngester *TypedIngester, id int) *IndexingWorkerV6 {
 
@@ -322,7 +318,6 @@ func (worker *IndexingWorkerV6) bulkChainedUpdate(updateCommandGroups [][]Update
 	if err != nil {
 		zap.L().Error("getIndices", zap.Error(err))
 	}
-	zap.L().Info("bulkChainedUpdate getIndices", zap.Any("indices", indices))
 
 	zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "multiGetFindRefDocsFull"))
 	refDocs, err := worker.multiGetFindRefDocsFull(indices, docs)
@@ -330,15 +325,11 @@ func (worker *IndexingWorkerV6) bulkChainedUpdate(updateCommandGroups [][]Update
 		zap.L().Error("multiGetFindRefDocsFull", zap.Error(err))
 	}
 
-	zap.L().Info("bulkChainedUpdate applyMerges", zap.Any("applyMerges refDocs", refDocs[0].Index))
-
 	zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
 	push, err := worker.applyMerges(updateCommandGroups, refDocs)
 	if err != nil {
 		zap.L().Error("applyMerges", zap.Error(err))
 	}
-
-	zap.L().Info("bulkChainedUpdate applyMerges", zap.Any("applyMerges push docs", push[0].Index))
 
 	zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "bulkIndex"))
 	err = worker.bulkIndex(push)
