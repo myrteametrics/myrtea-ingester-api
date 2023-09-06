@@ -5,7 +5,9 @@ import (
 	"context"
 	"encoding/json"
 	"errors"
+	"io/ioutil"
 	"strconv"
+	"strings"
 	"time"
 
 	goelasticsearch "github.com/elastic/go-elasticsearch/v6"
@@ -477,15 +479,20 @@ func (worker *IndexingWorkerV6) applyMerges(documents [][]UpdateCommand, refDocs
 		var doc models.Document
 		if len(refDocs) > i {
 			doc = refDocs[i]
+			if doc.Index == "" {
+				doc.ID = commands[0].DocumentID
+				doc.Index = buildAliasName(commands[0].DocumentType, index.Last)
+			}
 		}
 
 		// Index setup should probably not be here (be before in the indexing chain)
 		for _, command := range commands {
-			if command.NewDoc.Index == "" {
-				command.NewDoc.Index = buildAliasName(command.DocumentType, index.Last)
-			}
+			// if command.NewDoc.Index == "" {
+			// 	command.NewDoc.Index = buildAliasName(command.DocumentType, index.Last)
+			// }
 			doc = ApplyMergeLight(doc, command)
 		}
+
 		doc.IndexType = "document"
 		push = append(push, doc)
 		i++ // synchronise map iteration with reponse.Docs
@@ -537,8 +544,29 @@ func (worker *IndexingWorkerV6) bulkIndex(docs []models.Document) error {
 		zap.L().Error("bulkRequest", zap.Error(err))
 		return err
 	}
+
+	//if res.IsError() {
+	//	zap.L().Error("error")
+	//	return errors.New("error during bulkrequest")
+	//}
+
 	if res.IsError() {
-		zap.L().Error("error")
+		defer res.Body.Close()
+		bodyBytes, err := ioutil.ReadAll(res.Body)
+		if err != nil {
+			zap.L().Error("error reading response body", zap.Error(err))
+			return errors.New("error during bulkrequest and failed to read the response")
+		}
+		bodyStr := string(bodyBytes)
+
+		// Split the string on ';' and get the first error message
+		errorsList := strings.Split(bodyStr, ";")
+		if len(errorsList) > 0 {
+			zap.L().Error("Elasticsearch Bulk Request error", zap.String("first_error", errorsList[0]))
+		} else {
+			zap.L().Error("Elasticsearch Bulk Request error", zap.String("response", bodyStr))
+		}
+
 		return errors.New("error during bulkrequest")
 	}
 
@@ -550,7 +578,19 @@ func (worker *IndexingWorkerV6) bulkIndex(docs []models.Document) error {
 		return err
 	}
 	if len(r.Failed()) > 0 {
-		zap.L().Error("Error during bulkIndex", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID))
+		zap.L().Warn("Error during bulkIndex", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Docs", len(docs)), zap.Int("Errors", len(r.Failed())))
+		if len(r.Items) > 0 {
+			zap.L().Warn("Error item sample", zap.Any("response", r.Items[0]))
+		}
+		errorsMap := make(map[string]int64)
+		for _, item := range r.Items {
+			if _, found := errorsMap[item["index"].Error.Type]; found {
+				errorsMap[item["index"].Error.Type] += 1
+			} else {
+				errorsMap[item["index"].Error.Type] = 1
+			}
+		}
+		zap.L().Warn("Error typology mapping", zap.Any("errors", errorsMap))
 		return errors.New("bulkindex failed > 0")
 	}
 	return nil
