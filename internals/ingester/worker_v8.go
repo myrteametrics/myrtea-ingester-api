@@ -294,7 +294,9 @@ func (worker *IndexingWorkerV8) bulkChainedUpdate(updateCommandGroups [][]Update
 	}
 
 	zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "multiGetFindRefDocsFull"))
-		refDocs, err := worker.multiGetFindRefDocsFull(indices, docs)
+	zap.L().info("tailler de docs", zap.Any("",len(docs)))	
+	refDocs, err := worker.multiGetFindRefDocsFull(indices, docs)
+	zap.L().info("tailler de refDocs", zap.Any("",len(refDocs)))
 	if err != nil {
 		zap.L().Error("multiGetFindRefDocsFull", zap.Error(err))
 	}
@@ -444,6 +446,7 @@ func (worker *IndexingWorkerV8) applyMerges(documents [][]UpdateCommand, refDocs
 				if len(refDocs) > i {
 						doc = refDocs[i]
 			if doc.Index == "" {
+				zap.L().Info("documents is a new ",zap.Any(" : ",doc))
 								doc.ID = commands[0].DocumentID
 				doc.Index = buildAliasName(commands[0].DocumentType, index.Last)
 							}
