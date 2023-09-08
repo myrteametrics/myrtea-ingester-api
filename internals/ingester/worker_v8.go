@@ -277,7 +277,7 @@ func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]Updat
 // It execute sequentialy every single UpdateCommand on a specific "source" document, for each group of commands
 func (worker *IndexingWorkerV8) bulkChainedUpdate(updateCommandGroups [][]UpdateCommand) {
 
-		zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "starting"))
+	zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "starting"))
 	docs := make([]GetQuery, 0)
 	for _, commands := range updateCommandGroups {
 		docs = append(docs, GetQuery{DocumentType: commands[0].DocumentType, ID: commands[0].DocumentID})
@@ -294,9 +294,10 @@ func (worker *IndexingWorkerV8) bulkChainedUpdate(updateCommandGroups [][]Update
 	}
 
 	zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "multiGetFindRefDocsFull"))
-	zap.L().info("tailler de docs", zap.Any("",len(docs)))	
+
 	refDocs, err := worker.multiGetFindRefDocsFull(indices, docs)
-	zap.L().info("tailler de refDocs", zap.Any("",len(refDocs)))
+
+	zap.L().Info("tailles de docs", zap.Any("refDocs", len(refDocs)), zap.Any("docs", len(docs)))
 	if err != nil {
 		zap.L().Error("multiGetFindRefDocsFull", zap.Error(err))
 	}
@@ -351,10 +352,10 @@ func (worker *IndexingWorkerV8) getIndices(documentType string) ([]string, error
 
 func (worker *IndexingWorkerV8) multiGetFindRefDocsFull(indices []string, docs []GetQuery) ([]models.Document, error) {
 	refDocs := make([]models.Document, 0)
-	var findDocs bool 
-	for _ , doc := range docs{
-		 sliceDoc := []GetQuery{doc}
-		 findDocs = false
+	var findDocs bool
+	for _, doc := range docs {
+		sliceDoc := []GetQuery{doc}
+		findDocs = false
 		for _, index := range indices {
 			responseDocs, err := worker.multiGetFindRefDocs(index, sliceDoc)
 			if err != nil {
@@ -369,7 +370,7 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsFull(indices []string, docs [
 						zap.L().Error("update multiget unmarshal", zap.Error(err))
 						continue
 					}
-	
+
 					var typedDocOk types.GetResult
 					err = json.Unmarshal(jsonString, &typedDocOk)
 					if err != nil {
@@ -386,23 +387,27 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsFull(indices []string, docs [
 						zap.L().Error("update multiget unmarshal", zap.Error(err))
 						continue
 					}
-	
+
 					if typedDocOk.Found {
 						findDocs = true
 						refDocs = append(refDocs, models.Document{ID: typedDocOk.Id_, Index: typedDocOk.Index_, IndexType: "_doc", Source: source})
 						break
-					} 
+					}
 				default:
 					zap.L().Error("Unkwown response type", zap.Any("typedDoc", typedDoc), zap.Any("type", reflect.TypeOf(typedDoc)))
 				}
-	
+
+			}
+
+			if findDocs {
+				break
 			}
 		}
 		if !findDocs {
 			refDocs = append(refDocs, models.Document{})
 		}
-	} 
-	
+	}
+
 	return refDocs, nil
 }
 func (worker *IndexingWorkerV8) multiGetFindRefDocs(index string, queries []GetQuery) ([]types.ResponseItem, error) {
@@ -443,13 +448,13 @@ func (worker *IndexingWorkerV8) applyMerges(documents [][]UpdateCommand, refDocs
 	var i int
 	for _, commands := range documents {
 		var doc models.Document
-				if len(refDocs) > i {
-						doc = refDocs[i]
+		if len(refDocs) > i {
+			doc = refDocs[i]
 			if doc.Index == "" {
-				zap.L().Info("documents is a new ",zap.Any(" : ",doc))
-								doc.ID = commands[0].DocumentID
+				zap.L().Info("documents is a new ", zap.Any(" : ", doc))
+				doc.ID = commands[0].DocumentID
 				doc.Index = buildAliasName(commands[0].DocumentType, index.Last)
-							}
+			}
 		}
 
 		// Index setup should probably not be here (be before in the indexing chain)
@@ -523,7 +528,7 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 	buf := bytes.NewBuffer(make([]byte, 0))
 
 	for _, doc := range docs {
-				source, err := builBulkIndexItem(doc.Index, doc.ID, doc.Source)
+		source, err := builBulkIndexItem(doc.Index, doc.ID, doc.Source)
 		if err != nil {
 			zap.L().Error("", zap.Error(err))
 		}
