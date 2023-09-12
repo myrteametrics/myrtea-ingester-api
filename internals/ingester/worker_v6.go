@@ -316,12 +316,17 @@ func (worker *IndexingWorkerV6) bulkChainedUpdate(updateCommandGroups [][]Update
 	if err != nil {
 		zap.L().Error("getIndices", zap.Error(err))
 	}
-
+	zap.L().Info("indices", zap.Any("",indices))
 	zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "multiGetFindRefDocsFull"))
 	refDocs, err := worker.multiGetFindRefDocsFull(indices, docs)
 	if err != nil {
 		zap.L().Error("multiGetFindRefDocsFull", zap.Error(err))
 	}
+
+	zap.L().Info("tailles de docs", zap.Any("refDocs", len(refDocs)), zap.Any("docs", len(docs)))
+	zap.L().Info("\n\n")
+	zap.L().Info("", zap.Any("refDocs", refDocs))
+	zap.L().Info("", zap.Any("docs", docs))
 
 	zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
 	push, err := worker.applyMerges(updateCommandGroups, refDocs)
@@ -522,6 +527,7 @@ func (worker *IndexingWorkerV6) bulkIndex(docs []models.Document) error {
 	buf := bytes.NewBuffer(make([]byte, 0))
 
 	for _, doc := range docs {
+		zap.L().Info("document ",zap.Any(":",doc.ID), zap.Any("sera indexe",doc.Index))
 		req := elastic.NewBulkIndexRequest().Index(doc.Index).Type(doc.IndexType).Id(doc.ID).Doc(doc.Source)
 		source, err := req.Source()
 		if err != nil {
