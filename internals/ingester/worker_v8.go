@@ -560,9 +560,20 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 	// zap.L().Info("response", zap.Any("r", r))
 	if len(r.Failed()) > 0 {
 		zap.L().Warn("Error during bulkIndex", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Docs", len(docs)), zap.Int("Errors", len(r.Failed())))
-		if len(r.Items) > 0 {
+		sampleItemFound := false
+		for _, item := range r.Items {
+			if item["index"].Error.Type == "" {
+				continue
+			}
+			zap.L().Warn("BulkIndex ElasticSearch error", zap.Any("error", item["index"].Error))
+			sampleItemFound = true
+			break
+		}
+
+		if len(r.Items) > 0 && !sampleItemFound {
 			zap.L().Warn("Error item sample", zap.Any("response", r.Items[0]))
 		}
+
 		errorsMap := make(map[string]int64)
 		for _, item := range r.Items {
 			if _, found := errorsMap[item["index"].Error.Type]; found {
