@@ -58,7 +58,7 @@ var (
 		Namespace: "myrtea",
 		Name:      "worker_bulk_insert_duration_seconds",
 		Help:      "this is the help string for worker_bulk_insert_duration_seconds",
-		Buckets:   stdprometheus.DefBuckets,
+		Buckets:   []float64{.05, .1, .25, .5, 1, 2.5, 5, 10, 15, 25, 45},
 	}, []string{"typedingester", "workerid"})
 )
 
