@@ -25,13 +25,14 @@ import (
 
 // IndexingWorkerV8 is the unit of processing which can be started in parallel for elasticsearch ingestion
 type IndexingWorkerV8 struct {
-	Uuid                      uuid.UUID
-	TypedIngester             *TypedIngester
-	ID                        int
-	Data                      chan UpdateCommand
-	metricWorkerQueueGauge    metrics.Gauge
-	metricWorkerMessage       metrics.Counter
-	metricWorkerFlushDuration metrics.Histogram
+	Uuid                           uuid.UUID
+	TypedIngester                  *TypedIngester
+	ID                             int
+	Data                           chan UpdateCommand
+	metricWorkerQueueGauge         metrics.Gauge
+	metricWorkerMessage            metrics.Counter
+	metricWorkerFlushDuration      metrics.Histogram
+	metricWorkerBulkInsertDuration metrics.Histogram
 }
 
 // NewIndexingWorkerV8 returns a new IndexingWorkerV8
@@ -45,13 +46,14 @@ func NewIndexingWorkerV8(typedIngester *TypedIngester, id int) *IndexingWorkerV8
 	}
 
 	worker := &IndexingWorkerV8{
-		Uuid:                      uuid.New(),
-		TypedIngester:             typedIngester,
-		ID:                        id,
-		Data:                      data,
-		metricWorkerQueueGauge:    _metricWorkerQueueGauge.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerMessage:       _metricWorkerMessage.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerFlushDuration: _metricWorkerFlushDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		Uuid:                           uuid.New(),
+		TypedIngester:                  typedIngester,
+		ID:                             id,
+		Data:                           data,
+		metricWorkerQueueGauge:         _metricWorkerQueueGauge.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerMessage:            _metricWorkerMessage.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerFlushDuration:      _metricWorkerFlushDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerBulkInsertDuration: _metricWorkerBulkInsertDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
 	}
 	worker.metricWorkerQueueGauge.Set(0)
 	worker.metricWorkerMessage.With("status", "flushed").Add(0)
@@ -538,7 +540,12 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 		}
 	}
 
+	start := time.Now()
+
 	res, err := esapi.BulkRequest{Body: buf}.Do(ctx, elasticsearchv8.C())
+
+	worker.metricWorkerBulkInsertDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
+
 	if err != nil {
 		zap.L().Error("bulkRequest", zap.Error(err))
 		return err
@@ -560,9 +567,20 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 	// zap.L().Info("response", zap.Any("r", r))
 	if len(r.Failed()) > 0 {
 		zap.L().Warn("Error during bulkIndex", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Docs", len(docs)), zap.Int("Errors", len(r.Failed())))
-		if len(r.Items) > 0 {
+		sampleItemFound := false
+		for _, item := range r.Items {
+			if item["index"].Error.Type == "" {
+				continue
+			}
+			zap.L().Warn("BulkIndex ElasticSearch error", zap.Any("error", item["index"].Error))
+			sampleItemFound = true
+			break
+		}
+
+		if len(r.Items) > 0 && !sampleItemFound {
 			zap.L().Warn("Error item sample", zap.Any("response", r.Items[0]))
 		}
+
 		errorsMap := make(map[string]int64)
 		for _, item := range r.Items {
 			if _, found := errorsMap[item["index"].Error.Type]; found {
