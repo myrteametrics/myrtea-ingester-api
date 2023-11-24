@@ -4,7 +4,9 @@ import (
 	"bytes"
 	"context"
 	"errors"
+	"github.com/alitto/pond"
 	"reflect"
+	"runtime"
 	"strconv"
 	"time"
 
@@ -490,6 +492,8 @@ func (worker *IndexingWorkerV8) applyMerges(documents [][]UpdateCommand, refDocs
 }
 
 func (worker *IndexingWorkerV8) applyMergesV2(updateCommandGroups [][]UpdateCommand, refDocs []models.Document) ([]models.Document, error) {
+	cpuNb := runtime.NumCPU()
+	pool := pond.New(cpuNb, 0, pond.MinWorkers(cpuNb))
 
 	push := make([]models.Document, 0)
 	for i, updateCommandGroup := range updateCommandGroups {
@@ -497,15 +501,20 @@ func (worker *IndexingWorkerV8) applyMergesV2(updateCommandGroups [][]UpdateComm
 		if len(refDocs) > i {
 			pushDoc = models.Document{ID: refDocs[i].ID, Index: refDocs[i].Index, IndexType: refDocs[i].IndexType, Source: refDocs[i].Source}
 		}
-		for _, command := range updateCommandGroup {
-			if pushDoc.ID == "" {
-				pushDoc = models.Document{ID: command.NewDoc.ID, Index: command.NewDoc.Index, IndexType: command.NewDoc.IndexType, Source: command.NewDoc.Source}
-			} else {
-				pushDoc = ApplyMergeLight(pushDoc, command)
+		pool.Submit(func() {
+			for _, command := range updateCommandGroup {
+				if pushDoc.ID == "" {
+					pushDoc = models.Document{ID: command.NewDoc.ID, Index: command.NewDoc.Index, IndexType: command.NewDoc.IndexType, Source: command.NewDoc.Source}
+				} else {
+					pushDoc = ApplyMergeLight(pushDoc, command)
+				}
 			}
-		}
-		push = append(push, pushDoc)
+			push = append(push, pushDoc)
+		})
 	}
+
+	// Stop the pool and wait for all submitted tasks to complete
+	pool.StopAndWait()
 
 	return push, nil
 }
