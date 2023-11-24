@@ -1,7 +1,7 @@
 package handlers
 
 import (
-	"encoding/json"
+	jsoniter "github.com/json-iterator/go"
 	"net/http"
 
 	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/ingester"
@@ -44,7 +44,7 @@ func (handler *IngesterHandler) ReceiveData(w http.ResponseWriter, r *http.Reque
 
 	var bir ingester.BulkIngestRequest
 
-	err := json.NewDecoder(r.Body).Decode(&bir)
+	err := jsoniter.NewDecoder(r.Body).Decode(&bir)
 	if err != nil {
 		zap.L().Warn("Cannot decode body", zap.Error(err))
 		w.WriteHeader(http.StatusBadRequest)

@@ -3,7 +3,6 @@ package ingester
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"io/ioutil"
 	"strconv"
@@ -237,7 +236,7 @@ func (worker *IndexingWorkerV6) directMultiGetDocs(updateCommandGroups [][]Updat
 	source["docs"] = sourceItems
 
 	var body = new(bytes.Buffer)
-	err := json.NewEncoder(body).Encode(source)
+	err := jsoniter.NewEncoder(body).Encode(source)
 	if err != nil {
 		zap.L().Warn("json encode source", zap.Error(err))
 		// return make([]*elastic.GetResult, 0), err
@@ -259,7 +258,7 @@ func (worker *IndexingWorkerV6) directMultiGetDocs(updateCommandGroups [][]Updat
 	}
 
 	var response elastic.MgetResponse
-	if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
+	if err := jsoniter.NewDecoder(res.Body).Decode(&response); err != nil {
 		zap.L().Error("parsing the response body", zap.Error(err))
 		// return make([]*elastic.GetResult, 0), err
 	}
@@ -361,7 +360,7 @@ func (worker *IndexingWorkerV6) getIndices(documentType string) ([]string, error
 	r := make(map[string]struct {
 		Aliases map[string]interface{} `json:"aliases"`
 	})
-	if err := json.NewDecoder(res.Body).Decode(&r); err != nil {
+	if err := jsoniter.NewDecoder(res.Body).Decode(&r); err != nil {
 		zap.L().Error("decode alias response", zap.Error(err), zap.String("alias", alias), zap.Any("request", esapi.IndicesGetAliasRequest{Name: []string{alias}}))
 		return make([]string, 0), errors.New("alias not found")
 	}
@@ -435,7 +434,7 @@ func (worker *IndexingWorkerV6) multiGetFindRefDocs(index string, queries []GetQ
 	source["docs"] = sourceItems
 
 	var body = new(bytes.Buffer)
-	err := json.NewEncoder(body).Encode(source)
+	err := jsoniter.NewEncoder(body).Encode(source)
 	if err != nil {
 		zap.L().Warn("json encode source", zap.Error(err))
 		return make([]*elastic.GetResult, 0), err
@@ -459,7 +458,7 @@ func (worker *IndexingWorkerV6) multiGetFindRefDocs(index string, queries []GetQ
 	}
 
 	var response elastic.MgetResponse
-	if err := json.NewDecoder(res.Body).Decode(&response); err != nil {
+	if err := jsoniter.NewDecoder(res.Body).Decode(&response); err != nil {
 		zap.L().Error("parsing the response body", zap.Error(err))
 		return make([]*elastic.GetResult, 0), err
 	}
@@ -573,7 +572,7 @@ func (worker *IndexingWorkerV6) bulkIndex(docs []models.Document) error {
 	zap.L().Debug("Executing bulkindex", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("status", "done"))
 
 	var r elastic.BulkResponse
-	if err := json.NewDecoder(res.Body).Decode(&r); err != nil {
+	if err := jsoniter.NewDecoder(res.Body).Decode(&r); err != nil {
 		zap.L().Error("decode bulk response", zap.Error(err))
 		return err
 	}

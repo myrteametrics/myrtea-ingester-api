@@ -3,7 +3,6 @@ package ingester
 import (
 	"bytes"
 	"context"
-	"encoding/json"
 	"errors"
 	"reflect"
 	"strconv"
@@ -25,14 +24,18 @@ import (
 
 // IndexingWorkerV8 is the unit of processing which can be started in parallel for elasticsearch ingestion
 type IndexingWorkerV8 struct {
-	Uuid                           uuid.UUID
-	TypedIngester                  *TypedIngester
-	ID                             int
-	Data                           chan UpdateCommand
-	metricWorkerQueueGauge         metrics.Gauge
-	metricWorkerMessage            metrics.Counter
-	metricWorkerFlushDuration      metrics.Histogram
-	metricWorkerBulkInsertDuration metrics.Histogram
+	Uuid                                     uuid.UUID
+	TypedIngester                            *TypedIngester
+	ID                                       int
+	Data                                     chan UpdateCommand
+	metricWorkerQueueGauge                   metrics.Gauge
+	metricWorkerMessage                      metrics.Counter
+	metricWorkerFlushDuration                metrics.Histogram
+	metricWorkerBulkInsertDuration           metrics.Histogram
+	metricWorkerBulkIndexDuration            metrics.Histogram
+	metricWorkerApplyMergesDuration          metrics.Histogram
+	metricWorkerDirectMultiGetDuration       metrics.Histogram
+	metricWorkerBulkIndexBuildBufferDuration metrics.Histogram
 }
 
 // NewIndexingWorkerV8 returns a new IndexingWorkerV8
@@ -46,14 +49,18 @@ func NewIndexingWorkerV8(typedIngester *TypedIngester, id int) *IndexingWorkerV8
 	}
 
 	worker := &IndexingWorkerV8{
-		Uuid:                           uuid.New(),
-		TypedIngester:                  typedIngester,
-		ID:                             id,
-		Data:                           data,
-		metricWorkerQueueGauge:         _metricWorkerQueueGauge.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerMessage:            _metricWorkerMessage.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerFlushDuration:      _metricWorkerFlushDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerBulkInsertDuration: _metricWorkerBulkInsertDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		Uuid:                                     uuid.New(),
+		TypedIngester:                            typedIngester,
+		ID:                                       id,
+		Data:                                     data,
+		metricWorkerQueueGauge:                   _metricWorkerQueueGauge.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerMessage:                      _metricWorkerMessage.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerFlushDuration:                _metricWorkerFlushDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerBulkInsertDuration:           _metricWorkerBulkInsertDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerBulkIndexDuration:            _metricWorkerBulkIndexDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerApplyMergesDuration:          _metricWorkerApplyMergesDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerDirectMultiGetDuration:       _metricWorkerDirectMultiGetDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerBulkIndexBuildBufferDuration: _metricWorkerBulkIndexBuildBufferDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
 	}
 	worker.metricWorkerQueueGauge.Set(0)
 	worker.metricWorkerMessage.With("status", "flushed").Add(0)
@@ -160,25 +167,35 @@ func (worker *IndexingWorkerV8) flushEsBuffer(buffer []UpdateCommand) {
 
 func (worker *IndexingWorkerV8) directBulkChainedUpdate(updateCommandGroups [][]UpdateCommand) {
 	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "starting"))
-
 	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "directMultiGetDocs"))
+
+	start := time.Now()
 	refDocs, err := worker.directMultiGetDocs(updateCommandGroups)
+	worker.metricWorkerDirectMultiGetDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
+
 	if err != nil {
 		zap.L().Error("directMultiGetDocs", zap.Error(err))
 	}
 
 	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
+
+	start = time.Now()
 	push, err := worker.applyMergesV2(updateCommandGroups, refDocs)
+	worker.metricWorkerApplyMergesDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
+
 	if err != nil {
 		zap.L().Error("applyMergesV2", zap.Error(err))
 	}
 
 	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "bulkIndex"))
+
+	start = time.Now()
 	err = worker.bulkIndex(push)
+	worker.metricWorkerBulkIndexDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
+
 	if err != nil {
 		zap.L().Error("bulkIndex", zap.Error(err))
 	}
-
 	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "done"))
 }
 
@@ -222,7 +239,7 @@ func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]Updat
 		//     not working :(
 
 		case map[string]interface{}:
-			jsonString, err := json.Marshal(typedDoc)
+			jsonString, err := jsoniter.Marshal(typedDoc)
 			if err != nil {
 				zap.L().Error("update multiget unmarshal", zap.Error(err))
 				refDocs = append(refDocs, models.Document{})
@@ -230,7 +247,7 @@ func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]Updat
 			}
 
 			var typedDocOk types.GetResult
-			err = json.Unmarshal(jsonString, &typedDocOk)
+			err = jsoniter.Unmarshal(jsonString, &typedDocOk)
 			if err != nil {
 				zap.L().Error("update multiget unmarshal", zap.Error(err))
 				refDocs = append(refDocs, models.Document{})
@@ -299,7 +316,6 @@ func (worker *IndexingWorkerV8) bulkChainedUpdate(updateCommandGroups [][]Update
 
 	refDocs, err := worker.multiGetFindRefDocsFull(indices, docs)
 
-	zap.L().Info("tailles de docs", zap.Any("refDocs", len(refDocs)), zap.Any("docs", len(docs)))
 	if err != nil {
 		zap.L().Error("multiGetFindRefDocsFull", zap.Error(err))
 	}
@@ -340,7 +356,7 @@ func (worker *IndexingWorkerV8) getIndices(documentType string) ([]string, error
 	r := make(map[string]struct {
 		Aliases map[string]interface{} `json:"aliases"`
 	})
-	if err := json.NewDecoder(res.Body).Decode(&r); err != nil {
+	if err := jsoniter.NewDecoder(res.Body).Decode(&r); err != nil {
 		zap.L().Error("decode alias response", zap.Error(err), zap.String("alias", alias), zap.Any("request", esapi.IndicesGetAliasRequest{Name: []string{alias}}))
 		return make([]string, 0), errors.New("alias not found")
 	}
@@ -367,14 +383,14 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsFull(indices []string, docs [
 				_ = i
 				switch typedDoc := d.(type) {
 				case map[string]interface{}:
-					jsonString, err := json.Marshal(typedDoc)
+					jsonString, err := jsoniter.Marshal(typedDoc)
 					if err != nil {
 						zap.L().Error("update multiget unmarshal", zap.Error(err))
 						continue
 					}
 
 					var typedDocOk types.GetResult
-					err = json.Unmarshal(jsonString, &typedDocOk)
+					err = jsoniter.Unmarshal(jsonString, &typedDocOk)
 					if err != nil {
 						zap.L().Error("update multiget unmarshal", zap.Error(err))
 						continue
@@ -453,7 +469,6 @@ func (worker *IndexingWorkerV8) applyMerges(documents [][]UpdateCommand, refDocs
 		if len(refDocs) > i {
 			doc = refDocs[i]
 			if doc.Index == "" {
-				zap.L().Info("documents is a new ", zap.Any(" : ", doc))
 				doc.ID = commands[0].DocumentID
 				doc.Index = buildAliasName(commands[0].DocumentType, index.Last)
 			}
@@ -495,7 +510,7 @@ func (worker *IndexingWorkerV8) applyMergesV2(updateCommandGroups [][]UpdateComm
 	return push, nil
 }
 
-func builBulkIndexItem(index string, id string, source interface{}) ([]string, error) {
+func buildBulkIndexItem(index string, id string, source interface{}) ([]string, error) {
 
 	lines := make([]string, 2)
 
@@ -507,13 +522,13 @@ func builBulkIndexItem(index string, id string, source interface{}) ([]string, e
 		},
 	}
 
-	line0, err := json.Marshal(meta)
+	line0, err := jsoniter.Marshal(meta)
 	if err != nil {
 		return nil, err
 	}
 	lines[0] = string(line0)
 
-	line1, err := json.Marshal(source)
+	line1, err := jsoniter.Marshal(source)
 	if err != nil {
 		return nil, err
 	}
@@ -527,10 +542,11 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
+	start := time.Now()
 	buf := bytes.NewBuffer(make([]byte, 0))
 
 	for _, doc := range docs {
-		source, err := builBulkIndexItem(doc.Index, doc.ID, doc.Source)
+		source, err := buildBulkIndexItem(doc.Index, doc.ID, doc.Source)
 		if err != nil {
 			zap.L().Error("", zap.Error(err))
 		}
@@ -539,11 +555,10 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 			buf.WriteByte('\n')
 		}
 	}
+	worker.metricWorkerBulkIndexBuildBufferDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
 
-	start := time.Now()
-
+	start = time.Now()
 	res, err := esapi.BulkRequest{Body: buf}.Do(ctx, elasticsearchv8.C())
-
 	worker.metricWorkerBulkInsertDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
 
 	if err != nil {
@@ -559,7 +574,7 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 
 	// var r map[string]interface{}
 	var r elasticsearchv8.BulkIndexResponse
-	if err := json.NewDecoder(res.Body).Decode(&r); err != nil {
+	if err := jsoniter.NewDecoder(res.Body).Decode(&r); err != nil {
 		zap.L().Error("decode bulk response", zap.Error(err))
 		return err
 	}
@@ -610,7 +625,7 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 // 	}
 
 // 	for _, doc := range docs {
-// 		sourceStr, err := json.Marshal(doc.Source)
+// 		sourceStr, err := jsoniter.Marshal(doc.Source)
 // 		if err != nil {
 // 			return err
 // 		}
