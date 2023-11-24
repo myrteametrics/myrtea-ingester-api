@@ -14,10 +14,10 @@ var EnvPrefix = "MYRTEA"
 // AllowedConfigKey list every allowed configuration key
 var AllowedConfigKey = [][]helpers.ConfigKey{
 	// TODO: use helpers predefined keys !
-	helpers.GeneralConfigKeys,
-	helpers.HTTPServerConfigKeys,
-	helpers.PostgresqlConfigKeys,
-	helpers.ElasticsearchConfigKeys,
+	helpers.GetGeneralConfigKeys(),
+	helpers.GetHTTPServerConfigKeys(),
+	helpers.GetPostgresqlConfigKeys(),
+	helpers.GetElasticsearchConfigKeys(),
 	{
 		{Type: helpers.StringFlag, Name: "ELASTICSEARCH_HTTP_TIMEOUT", DefaultValue: "1m", Description: "Elasticsearch HTTP Client timeout"},
 		{Type: helpers.StringFlag, Name: "ELASTICSEARCH_DIRECT_MULTI_GET_MODE", DefaultValue: "true", Description: "Elasticsearch direct multi-get mode enabled"},
