@@ -10,7 +10,7 @@ require (
 	github.com/golang/protobuf v1.5.3
 	github.com/google/uuid v1.3.0
 	github.com/json-iterator/go v1.1.12
-	github.com/myrteametrics/myrtea-sdk/v4 v4.3.6
+	github.com/myrteametrics/myrtea-sdk/v4 v4.4.6
 	github.com/olivere/elastic v6.2.16+incompatible
 	github.com/prometheus/client_golang v1.14.0
 	github.com/spf13/viper v1.3.1
@@ -22,7 +22,7 @@ require (
 
 require (
 	github.com/KyleBanks/depth v1.2.1 // indirect
-	github.com/PaesslerAG/gval v1.0.1 // indirect
+	github.com/PaesslerAG/gval v1.2.2 // indirect
 	github.com/Shopify/sarama v1.38.0 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
