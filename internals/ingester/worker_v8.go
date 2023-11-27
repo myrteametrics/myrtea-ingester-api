@@ -6,7 +6,6 @@ import (
 	"errors"
 	"github.com/alitto/pond"
 	"reflect"
-	"runtime"
 	"strconv"
 	"time"
 
@@ -26,18 +25,17 @@ import (
 
 // IndexingWorkerV8 is the unit of processing which can be started in parallel for elasticsearch ingestion
 type IndexingWorkerV8 struct {
-	Uuid                                     uuid.UUID
-	TypedIngester                            *TypedIngester
-	ID                                       int
-	Data                                     chan UpdateCommand
-	metricWorkerQueueGauge                   metrics.Gauge
-	metricWorkerMessage                      metrics.Counter
-	metricWorkerFlushDuration                metrics.Histogram
-	metricWorkerBulkInsertDuration           metrics.Histogram
-	metricWorkerBulkIndexDuration            metrics.Histogram
-	metricWorkerApplyMergesDuration          metrics.Histogram
-	metricWorkerDirectMultiGetDuration       metrics.Histogram
-	metricWorkerBulkIndexBuildBufferDuration metrics.Histogram
+	Uuid                               uuid.UUID
+	TypedIngester                      *TypedIngester
+	ID                                 int
+	Data                               chan UpdateCommand
+	metricWorkerQueueGauge             metrics.Gauge
+	metricWorkerMessage                metrics.Counter
+	metricWorkerFlushDuration          metrics.Histogram
+	metricWorkerBulkInsertDuration     metrics.Histogram
+	metricWorkerBulkIndexDuration      metrics.Histogram
+	metricWorkerApplyMergesDuration    metrics.Histogram
+	metricWorkerDirectMultiGetDuration metrics.Histogram
 }
 
 // NewIndexingWorkerV8 returns a new IndexingWorkerV8
@@ -51,18 +49,17 @@ func NewIndexingWorkerV8(typedIngester *TypedIngester, id int) *IndexingWorkerV8
 	}
 
 	worker := &IndexingWorkerV8{
-		Uuid:                                     uuid.New(),
-		TypedIngester:                            typedIngester,
-		ID:                                       id,
-		Data:                                     data,
-		metricWorkerQueueGauge:                   _metricWorkerQueueGauge.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerMessage:                      _metricWorkerMessage.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerFlushDuration:                _metricWorkerFlushDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerBulkInsertDuration:           _metricWorkerBulkInsertDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerBulkIndexDuration:            _metricWorkerBulkIndexDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerApplyMergesDuration:          _metricWorkerApplyMergesDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerDirectMultiGetDuration:       _metricWorkerDirectMultiGetDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerBulkIndexBuildBufferDuration: _metricWorkerBulkIndexBuildBufferDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		Uuid:                               uuid.New(),
+		TypedIngester:                      typedIngester,
+		ID:                                 id,
+		Data:                               data,
+		metricWorkerQueueGauge:             _metricWorkerQueueGauge.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerMessage:                _metricWorkerMessage.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerFlushDuration:          _metricWorkerFlushDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerBulkInsertDuration:     _metricWorkerBulkInsertDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerBulkIndexDuration:      _metricWorkerBulkIndexDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerApplyMergesDuration:    _metricWorkerApplyMergesDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerDirectMultiGetDuration: _metricWorkerDirectMultiGetDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
 	}
 	worker.metricWorkerQueueGauge.Set(0)
 	worker.metricWorkerMessage.With("status", "flushed").Add(0)
@@ -182,7 +179,7 @@ func (worker *IndexingWorkerV8) directBulkChainedUpdate(updateCommandGroups [][]
 	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
 
 	start = time.Now()
-	push, err := worker.applyMergesV2(updateCommandGroups, refDocs)
+	push, err := worker.applyMergesV3(updateCommandGroups, refDocs)
 	worker.metricWorkerApplyMergesDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
 
 	if err != nil {
@@ -492,8 +489,6 @@ func (worker *IndexingWorkerV8) applyMerges(documents [][]UpdateCommand, refDocs
 }
 
 func (worker *IndexingWorkerV8) applyMergesV2(updateCommandGroups [][]UpdateCommand, refDocs []models.Document) ([]models.Document, error) {
-	cpuNb := runtime.NumCPU()
-	pool := pond.New(cpuNb, 0, pond.MinWorkers(cpuNb))
 
 	push := make([]models.Document, 0)
 	for i, updateCommandGroup := range updateCommandGroups {
@@ -501,15 +496,43 @@ func (worker *IndexingWorkerV8) applyMergesV2(updateCommandGroups [][]UpdateComm
 		if len(refDocs) > i {
 			pushDoc = models.Document{ID: refDocs[i].ID, Index: refDocs[i].Index, IndexType: refDocs[i].IndexType, Source: refDocs[i].Source}
 		}
+		for _, command := range updateCommandGroup {
+			if pushDoc.ID == "" {
+				pushDoc = models.Document{ID: command.NewDoc.ID, Index: command.NewDoc.Index, IndexType: command.NewDoc.IndexType, Source: command.NewDoc.Source}
+			} else {
+				pushDoc = ApplyMergeLight(pushDoc, command)
+			}
+		}
+		push = append(push, pushDoc)
+	}
+
+	return push, nil
+}
+
+func (worker *IndexingWorkerV8) applyMergesV3(updateCommandGroups [][]UpdateCommand, refDocs []models.Document) ([]models.Document, error) {
+	workerCount := viper.GetInt("APPLY_MERGE_WORKER_COUNT")
+	pool := pond.New(workerCount, 0, pond.MinWorkers(workerCount))
+	push := make([]models.Document, len(updateCommandGroups))
+
+	for idx, updateCommandGroup := range updateCommandGroups {
+		// We must create a local copy of the loop variables, otherwise the goroutine will use the last values of the variables
+		i := idx                                     // creates a copy of i
+		updateCommandGroupPtr := &updateCommandGroup // save the pointer to the slice (to avoid useless copy)
 		pool.Submit(func() {
-			for _, command := range updateCommandGroup {
+			var pushDoc models.Document
+			if len(refDocs) > i {
+				pushDoc = models.Document{ID: refDocs[i].ID, Index: refDocs[i].Index, IndexType: refDocs[i].IndexType, Source: refDocs[i].Source}
+			}
+
+			for _, command := range *updateCommandGroupPtr {
 				if pushDoc.ID == "" {
 					pushDoc = models.Document{ID: command.NewDoc.ID, Index: command.NewDoc.Index, IndexType: command.NewDoc.IndexType, Source: command.NewDoc.Source}
 				} else {
 					pushDoc = ApplyMergeLight(pushDoc, command)
 				}
 			}
-			push = append(push, pushDoc)
+
+			push[i] = pushDoc
 		})
 	}
 
@@ -551,7 +574,6 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
-	start := time.Now()
 	buf := bytes.NewBuffer(make([]byte, 0))
 
 	for _, doc := range docs {
@@ -564,9 +586,8 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 			buf.WriteByte('\n')
 		}
 	}
-	worker.metricWorkerBulkIndexBuildBufferDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
 
-	start = time.Now()
+	start := time.Now()
 	res, err := esapi.BulkRequest{Body: buf}.Do(ctx, elasticsearchv8.C())
 	worker.metricWorkerBulkInsertDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
 

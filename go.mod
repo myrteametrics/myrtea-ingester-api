@@ -3,7 +3,7 @@ module github.com/myrteametrics/myrtea-ingester-api/v5
 go 1.20
 
 require (
-	github.com/alecthomas/template v0.0.0-20190718012654-fb15b899a751
+	github.com/alitto/pond v1.8.3
 	github.com/elastic/go-elasticsearch/v6 v6.8.10
 	github.com/elastic/go-elasticsearch/v8 v8.7.0
 	github.com/go-chi/chi v4.1.2+incompatible
@@ -25,7 +25,6 @@ require (
 	github.com/KyleBanks/depth v1.2.1 // indirect
 	github.com/PaesslerAG/gval v1.2.2 // indirect
 	github.com/Shopify/sarama v1.38.0 // indirect
-	github.com/alitto/pond v1.8.3 // indirect
 	github.com/beorn7/perks v1.0.1 // indirect
 	github.com/buger/jsonparser v1.1.1 // indirect
 	github.com/cespare/xxhash/v2 v2.1.2 // indirect
@@ -86,6 +85,7 @@ require (
 	github.com/rcrowley/go-metrics v0.0.0-20201227073835-cf1acfcdf475 // indirect
 	github.com/rickar/cal v1.0.2-0.20191101183814-0e8e6fcfe1c2 // indirect
 	github.com/robfig/cron/v3 v3.0.0 // indirect
+	github.com/shopspring/decimal v1.3.1 // indirect
 	github.com/spf13/afero v1.1.2 // indirect
 	github.com/spf13/cast v1.3.0 // indirect
 	github.com/spf13/jwalterweatherman v1.0.0 // indirect

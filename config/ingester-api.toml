@@ -108,3 +108,7 @@ WORKER_FORCE_FLUSH_TIMEOUT_SEC = "10"
 # If DEBUG_DRY_RUN_ELASTICSEARCH = true, no interaction will be done with elasticsearch (no enrichment and no document post)
 # Default value: false
 DEBUG_DRY_RUN_ELASTICSEARCH = "false"
+
+# Specify the number of workers to apply merge operations
+# Default value: 4
+APPLY_MERGE_WORKER_COUNT = 4
