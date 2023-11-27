@@ -499,13 +499,13 @@ func (worker *IndexingWorkerV8) applyMergesV2(updateCommandGroups [][]UpdateComm
 			pushDoc = models.Document{ID: refDocs[i].ID, Index: refDocs[i].Index, IndexType: refDocs[i].IndexType, Source: refDocs[i].Source}
 		}
 		for _, command := range updateCommandGroup {
-			start := time.Now()
 			if pushDoc.ID == "" {
 				pushDoc = models.Document{ID: command.NewDoc.ID, Index: command.NewDoc.Index, IndexType: command.NewDoc.IndexType, Source: command.NewDoc.Source}
 			} else {
+				start := time.Now()
 				pushDoc = ApplyMergeLight(pushDoc, command)
+				worker.metricWorkerApplyMergesSingleDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
 			}
-			worker.metricWorkerApplyMergesSingleDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
 		}
 		push = append(push, pushDoc)
 	}
