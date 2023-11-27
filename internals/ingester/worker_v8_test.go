@@ -284,13 +284,7 @@ func TestApplyMergesV3(t *testing.T) {
 	//	expression.AssertEqual(t, found, true, "apply merges v2 and v3 should have the same documents")
 	//}
 	for i := 0; i < len(v2); i++ {
-		dv2, ok := v2[i].Source.(map[string]interface{})
-		expression.AssertEqual(t, ok, true, "v2 merge source should be a map")
-
-		dv3, ok := v3[i].Source.(map[string]interface{})
-		expression.AssertEqual(t, ok, true, "v3 merge source should be a map")
-
-		expression.AssertEqual(t, reflect.DeepEqual(dv2, dv3), true, "apply merges v2 and v3 should have the same result")
+		expression.AssertEqual(t, reflect.DeepEqual(v2[i].Source, v3[i].Source), true, "apply merges v2 and v3 should have the same result")
 	}
 
 	t.Logf("tested on %d documents", len(v2))
