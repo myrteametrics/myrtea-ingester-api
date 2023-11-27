@@ -25,17 +25,18 @@ import (
 
 // IndexingWorkerV8 is the unit of processing which can be started in parallel for elasticsearch ingestion
 type IndexingWorkerV8 struct {
-	Uuid                               uuid.UUID
-	TypedIngester                      *TypedIngester
-	ID                                 int
-	Data                               chan UpdateCommand
-	metricWorkerQueueGauge             metrics.Gauge
-	metricWorkerMessage                metrics.Counter
-	metricWorkerFlushDuration          metrics.Histogram
-	metricWorkerBulkInsertDuration     metrics.Histogram
-	metricWorkerBulkIndexDuration      metrics.Histogram
-	metricWorkerApplyMergesDuration    metrics.Histogram
-	metricWorkerDirectMultiGetDuration metrics.Histogram
+	Uuid                                  uuid.UUID
+	TypedIngester                         *TypedIngester
+	ID                                    int
+	Data                                  chan UpdateCommand
+	metricWorkerQueueGauge                metrics.Gauge
+	metricWorkerMessage                   metrics.Counter
+	metricWorkerFlushDuration             metrics.Histogram
+	metricWorkerBulkInsertDuration        metrics.Histogram
+	metricWorkerBulkIndexDuration         metrics.Histogram
+	metricWorkerApplyMergesDuration       metrics.Histogram
+	metricWorkerDirectMultiGetDuration    metrics.Histogram
+	metricWorkerApplyMergesSingleDuration metrics.Histogram
 }
 
 // NewIndexingWorkerV8 returns a new IndexingWorkerV8
@@ -49,17 +50,18 @@ func NewIndexingWorkerV8(typedIngester *TypedIngester, id int) *IndexingWorkerV8
 	}
 
 	worker := &IndexingWorkerV8{
-		Uuid:                               uuid.New(),
-		TypedIngester:                      typedIngester,
-		ID:                                 id,
-		Data:                               data,
-		metricWorkerQueueGauge:             _metricWorkerQueueGauge.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerMessage:                _metricWorkerMessage.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerFlushDuration:          _metricWorkerFlushDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerBulkInsertDuration:     _metricWorkerBulkInsertDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerBulkIndexDuration:      _metricWorkerBulkIndexDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerApplyMergesDuration:    _metricWorkerApplyMergesDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerDirectMultiGetDuration: _metricWorkerDirectMultiGetDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		Uuid:                                  uuid.New(),
+		TypedIngester:                         typedIngester,
+		ID:                                    id,
+		Data:                                  data,
+		metricWorkerQueueGauge:                _metricWorkerQueueGauge.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerMessage:                   _metricWorkerMessage.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerFlushDuration:             _metricWorkerFlushDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerBulkInsertDuration:        _metricWorkerBulkInsertDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerBulkIndexDuration:         _metricWorkerBulkIndexDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerApplyMergesDuration:       _metricWorkerApplyMergesDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerDirectMultiGetDuration:    _metricWorkerDirectMultiGetDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerApplyMergesSingleDuration: _metricWorkerApplyMergesSingleDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
 	}
 	worker.metricWorkerQueueGauge.Set(0)
 	worker.metricWorkerMessage.With("status", "flushed").Add(0)
@@ -179,7 +181,7 @@ func (worker *IndexingWorkerV8) directBulkChainedUpdate(updateCommandGroups [][]
 	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
 
 	start = time.Now()
-	push, err := worker.applyMergesV3(updateCommandGroups, refDocs)
+	push, err := worker.applyMergesV2(updateCommandGroups, refDocs)
 	worker.metricWorkerApplyMergesDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
 
 	if err != nil {
@@ -497,11 +499,13 @@ func (worker *IndexingWorkerV8) applyMergesV2(updateCommandGroups [][]UpdateComm
 			pushDoc = models.Document{ID: refDocs[i].ID, Index: refDocs[i].Index, IndexType: refDocs[i].IndexType, Source: refDocs[i].Source}
 		}
 		for _, command := range updateCommandGroup {
+			start := time.Now()
 			if pushDoc.ID == "" {
 				pushDoc = models.Document{ID: command.NewDoc.ID, Index: command.NewDoc.Index, IndexType: command.NewDoc.IndexType, Source: command.NewDoc.Source}
 			} else {
 				pushDoc = ApplyMergeLight(pushDoc, command)
 			}
+			worker.metricWorkerApplyMergesSingleDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
 		}
 		push = append(push, pushDoc)
 	}
