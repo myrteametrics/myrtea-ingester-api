@@ -498,7 +498,7 @@ func (worker *IndexingWorkerV8) applyMerges(documents [][]UpdateCommand, refDocs
 }
 
 func (worker *IndexingWorkerV8) applyMergesV2(updateCommandGroups [][]UpdateCommand, refDocs []models.Document) ([]models.Document, error) {
-	zap.L().Info("ApplyMergesV2", zap.Int("workerId", worker.ID), zap.Int("updateCommandGroups size", len(updateCommandGroups)), zap.Int("refDocs size", len(refDocs)))
+	//zap.L().Info("ApplyMergesV2", zap.Int("workerId", worker.ID), zap.Int("updateCommandGroups size", len(updateCommandGroups)), zap.Int("refDocs size", len(refDocs)))
 
 	push := make([]models.Document, 0)
 	for i, updateCommandGroup := range updateCommandGroups {
@@ -519,6 +519,11 @@ func (worker *IndexingWorkerV8) applyMergesV2(updateCommandGroups [][]UpdateComm
 		}
 		push = append(push, pushDoc)
 		worker.metricWorkerApplyMergesInnerDuration.Observe(float64(time.Since(start2).Nanoseconds()) / 1e9)
+
+		if time.Since(start2) >= 10*time.Second {
+			zap.L().Warn("ApplyMergesV2", zap.Int("workerId", worker.ID), zap.Int("updateCommandGroups size", len(updateCommandGroups)), zap.Int("refDocs size", len(refDocs)), zap.Any("duration", time.Since(start2)), zap.Any("pushDoc", pushDoc))
+		}
+
 	}
 
 	return push, nil
