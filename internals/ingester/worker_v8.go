@@ -37,6 +37,7 @@ type IndexingWorkerV8 struct {
 	metricWorkerApplyMergesDuration       metrics.Histogram
 	metricWorkerDirectMultiGetDuration    metrics.Histogram
 	metricWorkerApplyMergesSingleDuration metrics.Histogram
+	metricWorkerApplyMergesInnerDuration  metrics.Histogram
 }
 
 // NewIndexingWorkerV8 returns a new IndexingWorkerV8
@@ -62,6 +63,7 @@ func NewIndexingWorkerV8(typedIngester *TypedIngester, id int) *IndexingWorkerV8
 		metricWorkerApplyMergesDuration:       _metricWorkerApplyMergesDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
 		metricWorkerDirectMultiGetDuration:    _metricWorkerDirectMultiGetDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
 		metricWorkerApplyMergesSingleDuration: _metricWorkerApplyMergesSingleDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerApplyMergesInnerDuration:  _metricWorkerApplyMergesInnerDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
 	}
 	worker.metricWorkerQueueGauge.Set(0)
 	worker.metricWorkerMessage.With("status", "flushed").Add(0)
@@ -112,6 +114,7 @@ func (worker *IndexingWorkerV8) Run() {
 				worker.flushEsBuffer(buffer)
 				buffer = buffer[:0]
 			}
+			worker.metricWorkerQueueGauge.Set(float64(len(worker.Data)))
 			forceFlush = worker.resetForceFlush(forceFlushTimeout)
 
 		// Build indexing bulk
@@ -491,9 +494,12 @@ func (worker *IndexingWorkerV8) applyMerges(documents [][]UpdateCommand, refDocs
 }
 
 func (worker *IndexingWorkerV8) applyMergesV2(updateCommandGroups [][]UpdateCommand, refDocs []models.Document) ([]models.Document, error) {
+	zap.L().Debug("ApplyMergesV2", zap.Int("workerId", worker.ID), zap.Int("updateCommandGroups size", len(updateCommandGroups)), zap.Int("refDocs size", len(refDocs)))
 
 	push := make([]models.Document, 0)
 	for i, updateCommandGroup := range updateCommandGroups {
+		start2 := time.Now()
+
 		var pushDoc models.Document
 		if len(refDocs) > i {
 			pushDoc = models.Document{ID: refDocs[i].ID, Index: refDocs[i].Index, IndexType: refDocs[i].IndexType, Source: refDocs[i].Source}
@@ -508,6 +514,7 @@ func (worker *IndexingWorkerV8) applyMergesV2(updateCommandGroups [][]UpdateComm
 			}
 		}
 		push = append(push, pushDoc)
+		worker.metricWorkerApplyMergesInnerDuration.Observe(float64(time.Since(start2).Nanoseconds()) / 1e9)
 	}
 
 	return push, nil

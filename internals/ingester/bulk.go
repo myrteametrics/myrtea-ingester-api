@@ -46,13 +46,13 @@ func (ingester *BulkIngester) Ingest(bir BulkIngestRequest) error {
 
 	mergeConfig := bir.MergeConfig[0]
 	typedIngester := ingester.getTypedIngester(bir.DocumentType)
+	typedIngester.metricTypedIngesterQueueGauge.Set(float64(len(typedIngester.Data)))
+	for _, worker := range typedIngester.Workers {
+		worker.GetMetricWorkerQueueGauge().Set(float64(len(worker.GetData())))
+	}
 
 	if len(typedIngester.Data)+len(bir.Docs) >= cap(typedIngester.Data) {
 		zap.L().Debug("Buffered channel would be overloaded with incoming bulkIngestRequest")
-		typedIngester.metricTypedIngesterQueueGauge.Set(float64(len(typedIngester.Data)))
-		for _, worker := range typedIngester.Workers {
-			worker.GetMetricWorkerQueueGauge().Set(float64(len(worker.GetData())))
-		}
 		return errors.New("channel overload") // Replace with custom error
 	}
 

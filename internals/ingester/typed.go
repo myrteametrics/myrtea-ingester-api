@@ -78,7 +78,6 @@ func NewTypedIngester(bulkIngester *BulkIngester, documentType string) *TypedIng
 // In case of Mode == ENRICH_TO (Which might be the same at last ?)
 // * A dedicated "relation cache" is queried to find all the object which must be updated
 // * One or multiple update command are sent to the dedicated indexer
-//
 func (ingester *TypedIngester) Run() {
 	zap.L().Info("Starting TypedIngester", zap.String("documentType", ingester.DocumentType))
 
