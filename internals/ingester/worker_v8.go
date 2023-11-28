@@ -111,8 +111,10 @@ func (worker *IndexingWorkerV8) Run() {
 			zap.L().Info("Try on after timeout reached", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("workerLen", len(worker.Data)), zap.Int("Timeout", forceFlushTimeout))
 			if len(buffer) > 0 {
 				zap.L().Info("Flushing on timeout reached", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("workerLen", len(worker.Data)), zap.Int("Timeout", forceFlushTimeout))
+				s := time.Now()
 				worker.flushEsBuffer(buffer)
 				buffer = buffer[:0]
+				zap.L().Info("Finished flushing on timeout reached", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("workerLen", len(worker.Data)), zap.Int("Timeout", forceFlushTimeout), zap.Any("duration", time.Since(s)))
 			}
 			worker.metricWorkerQueueGauge.Set(float64(len(worker.Data)))
 			forceFlush = worker.resetForceFlush(forceFlushTimeout)
@@ -123,9 +125,11 @@ func (worker *IndexingWorkerV8) Run() {
 			buffer = append(buffer, uc)
 			if len(buffer) >= bufferLength {
 				zap.L().Info("Try flushing on full buffer", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("workerLen", len(worker.Data)))
+				s := time.Now()
 				worker.flushEsBuffer(buffer)
 				buffer = buffer[:0]
 				forceFlush = worker.resetForceFlush(forceFlushTimeout)
+				zap.L().Info("Finished try flushing on full buffer", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("workerLen", len(worker.Data)), zap.Any("duration", time.Since(s)))
 			}
 			worker.metricWorkerQueueGauge.Set(float64(len(worker.Data)))
 		}
@@ -494,7 +498,7 @@ func (worker *IndexingWorkerV8) applyMerges(documents [][]UpdateCommand, refDocs
 }
 
 func (worker *IndexingWorkerV8) applyMergesV2(updateCommandGroups [][]UpdateCommand, refDocs []models.Document) ([]models.Document, error) {
-	zap.L().Debug("ApplyMergesV2", zap.Int("workerId", worker.ID), zap.Int("updateCommandGroups size", len(updateCommandGroups)), zap.Int("refDocs size", len(refDocs)))
+	zap.L().Info("ApplyMergesV2", zap.Int("workerId", worker.ID), zap.Int("updateCommandGroups size", len(updateCommandGroups)), zap.Int("refDocs size", len(refDocs)))
 
 	push := make([]models.Document, 0)
 	for i, updateCommandGroup := range updateCommandGroups {
