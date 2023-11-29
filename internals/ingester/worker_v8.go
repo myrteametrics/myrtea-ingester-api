@@ -51,19 +51,17 @@ func NewIndexingWorkerV8(typedIngester *TypedIngester, id int) *IndexingWorkerV8
 	}
 
 	worker := &IndexingWorkerV8{
-		Uuid:                                  uuid.New(),
-		TypedIngester:                         typedIngester,
-		ID:                                    id,
-		Data:                                  data,
-		metricWorkerQueueGauge:                _metricWorkerQueueGauge.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerMessage:                   _metricWorkerMessage.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerFlushDuration:             _metricWorkerFlushDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerBulkInsertDuration:        _metricWorkerBulkInsertDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerBulkIndexDuration:         _metricWorkerBulkIndexDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerApplyMergesDuration:       _metricWorkerApplyMergesDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerDirectMultiGetDuration:    _metricWorkerDirectMultiGetDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerApplyMergesSingleDuration: _metricWorkerApplyMergesSingleDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerApplyMergesInnerDuration:  _metricWorkerApplyMergesInnerDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		Uuid:                               uuid.New(),
+		TypedIngester:                      typedIngester,
+		ID:                                 id,
+		Data:                               data,
+		metricWorkerQueueGauge:             _metricWorkerQueueGauge.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerMessage:                _metricWorkerMessage.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerFlushDuration:          _metricWorkerFlushDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerBulkInsertDuration:     _metricWorkerBulkInsertDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerBulkIndexDuration:      _metricWorkerBulkIndexDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerApplyMergesDuration:    _metricWorkerApplyMergesDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerDirectMultiGetDuration: _metricWorkerDirectMultiGetDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
 	}
 	worker.metricWorkerQueueGauge.Set(0)
 	worker.metricWorkerMessage.With("status", "flushed").Add(0)
@@ -498,12 +496,8 @@ func (worker *IndexingWorkerV8) applyMerges(documents [][]UpdateCommand, refDocs
 }
 
 func (worker *IndexingWorkerV8) applyMergesV2(updateCommandGroups [][]UpdateCommand, refDocs []models.Document) ([]models.Document, error) {
-	//zap.L().Info("ApplyMergesV2", zap.Int("workerId", worker.ID), zap.Int("updateCommandGroups size", len(updateCommandGroups)), zap.Int("refDocs size", len(refDocs)))
-
 	push := make([]models.Document, 0)
 	for i, updateCommandGroup := range updateCommandGroups {
-		start2 := time.Now()
-
 		var pushDoc models.Document
 		if len(refDocs) > i {
 			pushDoc = models.Document{ID: refDocs[i].ID, Index: refDocs[i].Index, IndexType: refDocs[i].IndexType, Source: refDocs[i].Source}
@@ -512,18 +506,10 @@ func (worker *IndexingWorkerV8) applyMergesV2(updateCommandGroups [][]UpdateComm
 			if pushDoc.ID == "" {
 				pushDoc = models.Document{ID: command.NewDoc.ID, Index: command.NewDoc.Index, IndexType: command.NewDoc.IndexType, Source: command.NewDoc.Source}
 			} else {
-				start := time.Now()
 				pushDoc = ApplyMergeLight(pushDoc, command)
-				worker.metricWorkerApplyMergesSingleDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
 			}
 		}
 		push = append(push, pushDoc)
-		worker.metricWorkerApplyMergesInnerDuration.Observe(float64(time.Since(start2).Nanoseconds()) / 1e9)
-
-		if time.Since(start2) >= 10*time.Second {
-			zap.L().Warn("ApplyMergesV2", zap.Int("workerId", worker.ID), zap.Int("updateCommandGroups size", len(updateCommandGroups)), zap.Int("refDocs size", len(refDocs)), zap.Any("duration", time.Since(start2)), zap.Any("pushDoc", pushDoc))
-		}
-
 	}
 
 	return push, nil

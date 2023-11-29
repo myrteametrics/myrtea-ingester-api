@@ -85,23 +85,10 @@ func (ingester *TypedIngester) Run() {
 		zap.L().Debug("Receive IngestRequest", zap.String("IngesterType", ingester.DocumentType), zap.Any("IngestRequest", ir))
 
 		workerID := getWorker(ir.Doc.ID, ingester.maxWorkers)
+		worker := ingester.Workers[workerID]
 		updateCommand := NewUpdateCommand(ir.Doc.Index, ir.Doc.ID, ir.DocumentType, ir.Doc, ir.MergeConfig)
 
-		// non blocking data dispatching
-	dispatcherLoop:
-		for {
-			worker := ingester.Workers[workerID]
-
-			select {
-			case worker.GetData() <- updateCommand:
-				break dispatcherLoop
-			default:
-			}
-
-			workerID = (workerID + 1) % ingester.maxWorkers
-			// wait 10 ms to avoid spamming if no worker available
-			time.Sleep(10 * time.Millisecond)
-		}
+		worker.GetData() <- updateCommand
 
 		zap.L().Debug("Send UpdateCommand", zap.String("IngesterType", ingester.DocumentType), zap.Int("WorkerID", workerID), zap.Any("updateCommand", updateCommand), zap.Any("len(chan)", len(ingester.Workers[workerID].GetData())))
 

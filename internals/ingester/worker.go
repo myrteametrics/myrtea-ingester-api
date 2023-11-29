@@ -78,18 +78,6 @@ var (
 		Help:      "this is the help string for worker_direct_multi_get_duration_seconds",
 		Buckets:   stdprometheus.DefBuckets,
 	}, []string{"typedingester", "workerid"})
-	_metricWorkerApplyMergesSingleDuration = prometheus.NewHistogramFrom(stdprometheus.HistogramOpts{
-		Namespace: "myrtea",
-		Name:      "worker_apply_merges_single_duration_seconds",
-		Help:      "this is the help string for worker_apply_merges_single_duration_seconds",
-		Buckets:   stdprometheus.DefBuckets, //[]float64{1, 2.5, 5, 10, 20, 30, 60, 120, 300, 600},
-	}, []string{"typedingester", "workerid"})
-	_metricWorkerApplyMergesInnerDuration = prometheus.NewHistogramFrom(stdprometheus.HistogramOpts{
-		Namespace: "myrtea",
-		Name:      "worker_apply_merges_inner_duration_seconds",
-		Help:      "this is the help string for worker_apply_merges_inner_duration_seconds",
-		Buckets:   stdprometheus.DefBuckets, //[]float64{1, 2.5, 5, 10, 20, 30, 60, 120, 300, 600},
-	}, []string{"typedingester", "workerid"})
 )
 
 func ApplyMergeLight(doc models.Document, command UpdateCommand) models.Document {
