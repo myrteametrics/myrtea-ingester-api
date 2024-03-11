@@ -2,6 +2,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"os"
 	"os/signal"
@@ -56,10 +57,11 @@ func main() {
 	serverTLSKey := viper.GetString("HTTP_SERVER_TLS_FILE_KEY")
 
 	router := router.NewChiRouterSimple(router.ConfigSimple{
-		Production:              viper.GetBool("LOGGER_PRODUCTION"),
-		CORS:                    viper.GetBool("HTTP_SERVER_API_ENABLE_CORS"),
-		Security:                viper.GetBool("HTTP_SERVER_API_ENABLE_SECURITY"),
-		GatewayMode:             viper.GetBool("HTTP_SERVER_API_ENABLE_GATEWAY_MODE"),
+		Production:  viper.GetBool("LOGGER_PRODUCTION"),
+		CORS:        viper.GetBool("HTTP_SERVER_API_ENABLE_CORS"),
+		Security:    viper.GetBool("HTTP_SERVER_API_ENABLE_SECURITY"),
+		GatewayMode: viper.GetBool("HTTP_SERVER_API_ENABLE_GATEWAY_MODE"),
+
 		VerboseError:            false,
 		AuthenticationMode:      "BASIC",
 		LogLevel:                zapConfig.Level,
@@ -88,23 +90,11 @@ func main() {
 		} else {
 			err = srv.ListenAndServe()
 		}
-		if err != nil && err != http.ErrServerClosed {
+		if err != nil && !errors.Is(err, http.ErrServerClosed) {
 			zap.L().Fatal("Server listen", zap.Error(err))
 		}
 	}()
 	zap.L().Info("Server Started", zap.String("addr", srv.Addr))
-
-	// go func() {
-	// 	lis, err := net.Listen("tcp", fmt.Sprintf("localhost:%d", 9011))
-	// 	if err != nil {
-	// 		log.Fatalf("failed to listen: %v", err)
-	// 	}
-	// 	var opts []grpc.ServerOption
-	// 	grpcServer := grpc.NewServer(opts...)
-	// 	pb.RegisterIngesterServer(grpcServer, handlers.NewIngesterServer())
-	// 	grpcServer.Serve(lis)
-	// }()
-	// zap.L().Info("GRPC Server Started", zap.String("addr", fmt.Sprintf("localhost:%d", 9011)))
 
 	<-done
 
