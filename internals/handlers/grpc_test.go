@@ -2,6 +2,7 @@ package handlers
 
 import (
 	"context"
+	"google.golang.org/grpc/credentials/insecure"
 	"testing"
 
 	"github.com/google/uuid"
@@ -12,8 +13,11 @@ import (
 )
 
 func TestGRPC(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping grpc test in short mode")
+	}
 	var opts []grpc.DialOption
-	opts = append(opts, grpc.WithInsecure())
+	opts = append(opts, grpc.WithTransportCredentials(insecure.NewCredentials()))
 	conn, err := grpc.Dial("localhost:9011", opts...)
 	if err != nil {
 		t.Error(err)
