@@ -13,6 +13,9 @@ import (
 )
 
 func TestDirectBulkChainedUpdate2(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping worker api calls in short mode")
+	}
 	helpers.InitializeConfig(config.AllowedConfigKey, config.ConfigName, config.ConfigPath, config.EnvPrefix)
 	helpers.InitLogger(viper.GetBool("LOGGER_PRODUCTION"))
 
@@ -37,6 +40,9 @@ func TestDirectBulkChainedUpdate2(t *testing.T) {
 }
 
 func TestDirectBulkChainedUpdate(t *testing.T) {
+	if testing.Short() {
+		t.Skip("skipping worker api calls in short mode")
+	}
 	helpers.InitializeConfig(config.AllowedConfigKey, config.ConfigName, config.ConfigPath, config.EnvPrefix)
 	helpers.InitLogger(viper.GetBool("LOGGER_PRODUCTION"))
 
