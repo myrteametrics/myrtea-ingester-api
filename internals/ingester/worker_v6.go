@@ -22,6 +22,7 @@ import (
 )
 
 // IndexingWorkerV6 is the unit of processing which can be started in parallel for elasticsearch ingestion
+// Deprecated
 type IndexingWorkerV6 struct {
 	Uuid                      uuid.UUID
 	TypedIngester             *TypedIngester
@@ -201,9 +202,9 @@ func (worker *IndexingWorkerV6) directBulkChainedUpdate(updateCommandGroups [][]
 	}
 
 	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
-	push, err := worker.applyMergesV2(updateCommandGroups, refDocs)
+	push, err := worker.applyDirectMerges(updateCommandGroups, refDocs)
 	if err != nil {
-		zap.L().Error("applyMergesV2", zap.Error(err))
+		zap.L().Error("applyDirectMerges", zap.Error(err))
 	}
 
 	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "bulkIndex"))
@@ -499,7 +500,7 @@ func (worker *IndexingWorkerV6) applyMerges(documents [][]UpdateCommand, refDocs
 	return push, nil
 }
 
-func (worker *IndexingWorkerV6) applyMergesV2(updateCommandGroups [][]UpdateCommand, refDocs []models.Document) ([]models.Document, error) {
+func (worker *IndexingWorkerV6) applyDirectMerges(updateCommandGroups [][]UpdateCommand, refDocs []models.Document) ([]models.Document, error) {
 
 	push := make([]models.Document, 0)
 	for i, updateCommandGroup := range updateCommandGroups {

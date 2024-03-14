@@ -36,6 +36,7 @@ type IndexingWorkerV8 struct {
 	metricWorkerApplyMergesDuration          metrics.Histogram
 	metricWorkerDirectMultiGetDuration       metrics.Histogram
 	metricWorkerBulkIndexBuildBufferDuration metrics.Histogram
+	metricWorkerGetIndicesDuration           metrics.Histogram
 }
 
 // NewIndexingWorkerV8 returns a new IndexingWorkerV8
@@ -61,6 +62,7 @@ func NewIndexingWorkerV8(typedIngester *TypedIngester, id int) *IndexingWorkerV8
 		metricWorkerApplyMergesDuration:          _metricWorkerApplyMergesDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
 		metricWorkerDirectMultiGetDuration:       _metricWorkerDirectMultiGetDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
 		metricWorkerBulkIndexBuildBufferDuration: _metricWorkerBulkIndexBuildBufferDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerGetIndicesDuration:           _metricWorkerGetIndicesDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
 	}
 	worker.metricWorkerQueueGauge.Set(0)
 	worker.metricWorkerMessage.With("status", "flushed").Add(0)
@@ -165,6 +167,7 @@ func (worker *IndexingWorkerV8) flushEsBuffer(buffer []UpdateCommand) {
 	worker.metricWorkerFlushDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
 }
 
+// directBulkChainedUpdate part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=true
 func (worker *IndexingWorkerV8) directBulkChainedUpdate(updateCommandGroups [][]UpdateCommand) {
 	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "starting"))
 	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "directMultiGetDocs"))
@@ -180,11 +183,11 @@ func (worker *IndexingWorkerV8) directBulkChainedUpdate(updateCommandGroups [][]
 	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
 
 	start = time.Now()
-	push, err := worker.applyMergesV2(updateCommandGroups, refDocs)
+	push, err := worker.applyDirectMerges(updateCommandGroups, refDocs)
 	worker.metricWorkerApplyMergesDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
 
 	if err != nil {
-		zap.L().Error("applyMergesV2", zap.Error(err))
+		zap.L().Error("applyDirectMerges", zap.Error(err))
 	}
 
 	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "bulkIndex"))
@@ -199,6 +202,7 @@ func (worker *IndexingWorkerV8) directBulkChainedUpdate(updateCommandGroups [][]
 	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "done"))
 }
 
+// directMultiGetDocs part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=true
 func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]UpdateCommand) ([]models.Document, error) {
 	docs := make([]*models.Document, 0)
 	for _, updateCommandGroup := range updateCommandGroups {
@@ -285,7 +289,7 @@ func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]Updat
 			// 	}
 			// }
 		default:
-			zap.L().Error("Unkwown response type", zap.Any("typedDoc", typedDoc), zap.Any("type", reflect.TypeOf(typedDoc)))
+			zap.L().Error("Unknown response type", zap.Any("typedDoc", typedDoc), zap.Any("type", reflect.TypeOf(typedDoc)))
 		}
 	}
 
@@ -294,8 +298,8 @@ func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]Updat
 
 // bulkChainedUpdate process multiple groups of UpdateCommand
 // It execute sequentialy every single UpdateCommand on a specific "source" document, for each group of commands
+// part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false
 func (worker *IndexingWorkerV8) bulkChainedUpdate(updateCommandGroups [][]UpdateCommand) {
-
 	zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "starting"))
 	docs := make([]GetQuery, 0)
 	for _, commands := range updateCommandGroups {
@@ -307,27 +311,36 @@ func (worker *IndexingWorkerV8) bulkChainedUpdate(updateCommandGroups [][]Update
 	}
 
 	zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "getindices"))
+	start := time.Now()
 	indices, err := worker.getIndices(docs[0].DocumentType)
+	worker.metricWorkerGetIndicesDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
 	if err != nil {
 		zap.L().Error("getIndices", zap.Error(err))
 	}
 
 	zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "multiGetFindRefDocsFull"))
 
+	start = time.Now()
 	refDocs, err := worker.multiGetFindRefDocsFull(indices, docs)
+	worker.metricWorkerDirectMultiGetDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
 
 	if err != nil {
 		zap.L().Error("multiGetFindRefDocsFull", zap.Error(err))
 	}
 
 	zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
+	start = time.Now()
 	push, err := worker.applyMerges(updateCommandGroups, refDocs)
+	worker.metricWorkerApplyMergesDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
+
 	if err != nil {
 		zap.L().Error("applyMerges", zap.Error(err))
 	}
 
 	zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "bulkIndex"))
+	start = time.Now()
 	err = worker.bulkIndex(push)
+	worker.metricWorkerBulkIndexDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
 	if err != nil {
 		zap.L().Error("bulkIndex", zap.Error(err))
 	}
@@ -335,6 +348,7 @@ func (worker *IndexingWorkerV8) bulkChainedUpdate(updateCommandGroups [][]Update
 	zap.L().Info("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "done"))
 }
 
+// getIndices part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false
 func (worker *IndexingWorkerV8) getIndices(documentType string) ([]string, error) {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -356,7 +370,7 @@ func (worker *IndexingWorkerV8) getIndices(documentType string) ([]string, error
 	r := make(map[string]struct {
 		Aliases map[string]interface{} `json:"aliases"`
 	})
-	if err := jsoniter.NewDecoder(res.Body).Decode(&r); err != nil {
+	if err = jsoniter.NewDecoder(res.Body).Decode(&r); err != nil {
 		zap.L().Error("decode alias response", zap.Error(err), zap.String("alias", alias), zap.Any("request", esapi.IndicesGetAliasRequest{Name: []string{alias}}))
 		return make([]string, 0), errors.New("alias not found")
 	}
@@ -368,6 +382,7 @@ func (worker *IndexingWorkerV8) getIndices(documentType string) ([]string, error
 	return indices, err
 }
 
+// multiGetFindRefDocsFull part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false
 func (worker *IndexingWorkerV8) multiGetFindRefDocsFull(indices []string, docs []GetQuery) ([]models.Document, error) {
 	refDocs := make([]models.Document, 0)
 	var findDocs bool
@@ -412,7 +427,7 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsFull(indices []string, docs [
 						break
 					}
 				default:
-					zap.L().Error("Unkwown response type", zap.Any("typedDoc", typedDoc), zap.Any("type", reflect.TypeOf(typedDoc)))
+					zap.L().Error("Unknown response type", zap.Any("typedDoc", typedDoc), zap.Any("type", reflect.TypeOf(typedDoc)))
 				}
 
 			}
@@ -428,6 +443,8 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsFull(indices []string, docs [
 
 	return refDocs, nil
 }
+
+// multiGetFindRefDocs part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false
 func (worker *IndexingWorkerV8) multiGetFindRefDocs(index string, queries []GetQuery) ([]types.ResponseItem, error) {
 	if len(queries) == 0 {
 		return nil, errors.New("docs[] is empty")
@@ -461,6 +478,7 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocs(index string, queries []GetQ
 	return response.Docs, nil
 }
 
+// applyMerges part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false
 func (worker *IndexingWorkerV8) applyMerges(documents [][]UpdateCommand, refDocs []models.Document) ([]models.Document, error) {
 	var push = make([]models.Document, 0)
 	var i int
@@ -489,7 +507,8 @@ func (worker *IndexingWorkerV8) applyMerges(documents [][]UpdateCommand, refDocs
 	return push, nil
 }
 
-func (worker *IndexingWorkerV8) applyMergesV2(updateCommandGroups [][]UpdateCommand, refDocs []models.Document) ([]models.Document, error) {
+// multiGetFindRefDocs part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=true
+func (worker *IndexingWorkerV8) applyDirectMerges(updateCommandGroups [][]UpdateCommand, refDocs []models.Document) ([]models.Document, error) {
 
 	push := make([]models.Document, 0)
 	for i, updateCommandGroup := range updateCommandGroups {
@@ -510,8 +529,8 @@ func (worker *IndexingWorkerV8) applyMergesV2(updateCommandGroups [][]UpdateComm
 	return push, nil
 }
 
+// buildBulkIndexItem all modes: ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false/true
 func buildBulkIndexItem(index string, id string, source interface{}) ([]string, error) {
-
 	lines := make([]string, 2)
 
 	meta := elasticsearchv8.BulkIndexMeta{
@@ -537,8 +556,8 @@ func buildBulkIndexItem(index string, id string, source interface{}) ([]string, 
 	return lines, nil
 }
 
+// bulkIndex all modes: ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false/true
 func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
-
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -574,7 +593,7 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 
 	// var r map[string]interface{}
 	var r elasticsearchv8.BulkIndexResponse
-	if err := jsoniter.NewDecoder(res.Body).Decode(&r); err != nil {
+	if err = jsoniter.NewDecoder(res.Body).Decode(&r); err != nil {
 		zap.L().Error("decode bulk response", zap.Error(err))
 		return err
 	}

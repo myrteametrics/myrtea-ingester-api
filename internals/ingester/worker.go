@@ -84,6 +84,12 @@ var (
 		Help:      "this is the help string for worker_bulk_index_build_buffer_duration_seconds",
 		Buckets:   []float64{1, 2.5, 5, 10, 20, 30, 60, 120, 300, 600},
 	}, []string{"typedingester", "workerid"})
+	_metricWorkerGetIndicesDuration = prometheus.NewHistogramFrom(stdprometheus.HistogramOpts{
+		Namespace: "myrtea",
+		Name:      "worker_get_indices_duration_seconds",
+		Help:      "this is the help string for worker_get_indices_duration_seconds",
+		Buckets:   []float64{.05, .1, .25, .5, 1, 2.5, 5, 10, 15, 25, 45},
+	}, []string{"typedingester", "workerid"})
 )
 
 func ApplyMergeLight(doc models.Document, command UpdateCommand) models.Document {
