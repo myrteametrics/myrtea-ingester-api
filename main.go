@@ -3,6 +3,7 @@ package main
 import (
 	"context"
 	"errors"
+	"github.com/myrteametrics/myrtea-sdk/v4/connector"
 	"net/http"
 	"os"
 	"os/signal"
@@ -56,12 +57,15 @@ func main() {
 	serverTLSCert := viper.GetString("HTTP_SERVER_TLS_FILE_CRT")
 	serverTLSKey := viper.GetString("HTTP_SERVER_TLS_FILE_KEY")
 
-	router := router.NewChiRouterSimple(router.ConfigSimple{
-		Production:  viper.GetBool("LOGGER_PRODUCTION"),
-		CORS:        viper.GetBool("HTTP_SERVER_API_ENABLE_CORS"),
-		Security:    viper.GetBool("HTTP_SERVER_API_ENABLE_SECURITY"),
-		GatewayMode: viper.GetBool("HTTP_SERVER_API_ENABLE_GATEWAY_MODE"),
+	done := make(chan os.Signal, 1)
+	apiKey := viper.GetString("ENGINE_API_KEY")
 
+	router := router.NewChiRouterSimple(router.ConfigSimple{
+		Production:              viper.GetBool("LOGGER_PRODUCTION"),
+		CORS:                    viper.GetBool("HTTP_SERVER_API_ENABLE_CORS"),
+		Security:                viper.GetBool("HTTP_SERVER_API_ENABLE_SECURITY"),
+		GatewayMode:             viper.GetBool("HTTP_SERVER_API_ENABLE_GATEWAY_MODE"),
+		Restarter:               connector.NewRestarter(done, apiKey),
 		VerboseError:            false,
 		AuthenticationMode:      "BASIC",
 		LogLevel:                zapConfig.Level,
@@ -80,8 +84,11 @@ func main() {
 		srv = server.NewUnsecuredServer(serverPort, router)
 	}
 
-	done := make(chan os.Signal, 1)
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
+
+	go time.AfterFunc(3*time.Minute, func() {
+		done <- os.Interrupt
+	})
 
 	go func() {
 		var err error

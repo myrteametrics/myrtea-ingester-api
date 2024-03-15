@@ -10,7 +10,6 @@ import (
 
 	"github.com/elastic/go-elasticsearch/v8/esapi"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/core/mget"
-	"github.com/elastic/go-elasticsearch/v8/typedapi/some"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
 	"github.com/go-kit/kit/metrics"
 	"github.com/google/uuid"
@@ -28,6 +27,7 @@ type IndexingWorkerV8 struct {
 	TypedIngester                            *TypedIngester
 	ID                                       int
 	Data                                     chan UpdateCommand
+	mgetBatchSize int
 	metricWorkerQueueGauge                   metrics.Gauge
 	metricWorkerMessage                      metrics.Counter
 	metricWorkerFlushDuration                metrics.Histogram
@@ -167,135 +167,6 @@ func (worker *IndexingWorkerV8) flushEsBuffer(buffer []UpdateCommand) {
 	worker.metricWorkerFlushDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
 }
 
-// directBulkChainedUpdate part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=true
-func (worker *IndexingWorkerV8) directBulkChainedUpdate(updateCommandGroups [][]UpdateCommand) {
-	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "starting"))
-	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "directMultiGetDocs"))
-
-	start := time.Now()
-	refDocs, err := worker.directMultiGetDocs(updateCommandGroups)
-	worker.metricWorkerDirectMultiGetDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
-
-	if err != nil {
-		zap.L().Error("directMultiGetDocs", zap.Error(err))
-	}
-
-	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
-
-	start = time.Now()
-	push, err := worker.applyDirectMerges(updateCommandGroups, refDocs)
-	worker.metricWorkerApplyMergesDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
-
-	if err != nil {
-		zap.L().Error("applyDirectMerges", zap.Error(err))
-	}
-
-	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "bulkIndex"))
-
-	start = time.Now()
-	err = worker.bulkIndex(push)
-	worker.metricWorkerBulkIndexDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
-
-	if err != nil {
-		zap.L().Error("bulkIndex", zap.Error(err))
-	}
-	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "done"))
-}
-
-// directMultiGetDocs part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=true
-func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]UpdateCommand) ([]models.Document, error) {
-	docs := make([]*models.Document, 0)
-	for _, updateCommandGroup := range updateCommandGroups {
-		docs = append(docs, &models.Document{Index: updateCommandGroup[0].Index, ID: updateCommandGroup[0].DocumentID})
-	}
-
-	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID))
-
-	source := make(map[string]interface{})
-	sourceItems := make([]types.MgetOperation, len(docs))
-	for i, doc := range docs {
-		sourceItems[i] = types.MgetOperation{Index_: some.String(doc.Index), Id_: doc.ID}
-	}
-	source["docs"] = sourceItems
-
-	req := mget.NewRequest()
-	req.Docs = sourceItems
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	response, err := elasticsearchv8.C().Mget().Request(req).Do(ctx)
-	if err != nil {
-		zap.L().Warn("json encode source", zap.Error(err))
-	}
-	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("status", "done"))
-
-	if err != nil || response.Docs == nil || len(response.Docs) == 0 {
-		zap.L().Error("MultiGet (self)", zap.Error(err))
-	}
-
-	refDocs := make([]models.Document, 0)
-	for _, d := range response.Docs {
-		switch typedDoc := d.(type) {
-		// case types.MultiGetError:
-		//     not working :(
-
-		// case types.GetResult:
-		//     not working :(
-
-		case map[string]interface{}:
-			jsonString, err := jsoniter.Marshal(typedDoc)
-			if err != nil {
-				zap.L().Error("update multiget unmarshal", zap.Error(err))
-				refDocs = append(refDocs, models.Document{})
-				continue
-			}
-
-			var typedDocOk types.GetResult
-			err = jsoniter.Unmarshal(jsonString, &typedDocOk)
-			if err != nil {
-				zap.L().Error("update multiget unmarshal", zap.Error(err))
-				refDocs = append(refDocs, models.Document{})
-				continue
-			}
-			if len(typedDocOk.Source_) == 0 {
-				// no source => MultiGetError
-				refDocs = append(refDocs, models.Document{})
-				continue
-			}
-
-			var source map[string]interface{}
-			err = jsoniter.Unmarshal(typedDocOk.Source_, &source)
-			if err != nil {
-				zap.L().Error("update multiget unmarshal", zap.Error(err))
-				refDocs = append(refDocs, models.Document{})
-				continue
-			}
-
-			if typedDocOk.Found {
-				refDocs = append(refDocs, models.Document{ID: typedDocOk.Id_, Index: typedDocOk.Index_, IndexType: "_doc", Source: source})
-			} else {
-				refDocs = append(refDocs, models.Document{})
-			}
-
-			// if len(refDocs) > i && refDocs[i].ID == "" {
-			// 	if typedDocOk.Found {
-			// 		refDocs[i] = models.Document{ID: typedDocOk.Id_, Index: typedDocOk.Index_, IndexType: "_doc", Source: source}
-			// 	}
-			// } else {
-			// 	if typedDocOk.Found {
-			// 		refDocs = append(refDocs, models.Document{ID: typedDocOk.Id_, Index: typedDocOk.Index_, IndexType: "_doc", Source: source})
-			// 	} else {
-			// 		refDocs = append(refDocs, models.Document{})
-			// 	}
-			// }
-		default:
-			zap.L().Error("Unknown response type", zap.Any("typedDoc", typedDoc), zap.Any("type", reflect.TypeOf(typedDoc)))
-		}
-	}
-
-	return refDocs, nil
-}
-
 // bulkChainedUpdate process multiple groups of UpdateCommand
 // It execute sequentialy every single UpdateCommand on a specific "source" document, for each group of commands
 // part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false
@@ -321,7 +192,7 @@ func (worker *IndexingWorkerV8) bulkChainedUpdate(updateCommandGroups [][]Update
 	zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "multiGetFindRefDocsFull"))
 
 	start = time.Now()
-	refDocs, err := worker.multiGetFindRefDocsFull(indices, docs)
+	refDocs, err := worker.multiGetFindRefDocsFullV2(indices, docs)
 	worker.metricWorkerDirectMultiGetDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
 
 	if err != nil {
@@ -383,8 +254,191 @@ func (worker *IndexingWorkerV8) getIndices(documentType string) ([]string, error
 }
 
 // multiGetFindRefDocsFull part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false
+func (worker *IndexingWorkerV8) multiGetFindRefDocsFullV2(indices []string, docs []GetQuery) ([]models.Document, error) {
+	refDocs := map[string]models.Document{}
+
+	var mgetBatches []map[string]GetQuery
+
+	// create batches
+	currentMgetBatch := map[string]GetQuery{}
+
+	for i := 0; i < len(docs); i++ {
+		if i != 0 && i % worker.mgetBatchSize == 0 {
+			mgetBatches = append(mgetBatches, currentMgetBatch)
+			currentMgetBatch = map[string]GetQuery{}
+		}
+	}
+
+	// pour chaque batch
+
+
+	for _, index := range indices {
+		for _, batch := range mgetBatches {
+
+			responseDocs, err := worker.multiGetFindRefDocsV2(index, batch)
+			if err != nil {
+				zap.L().Error("multiGetFindRefDocs", zap.Error(err))
+			}
+
+			for _, doc := range responseDocs.Docs {
+				if !doc.Found { continue }
+
+				// a document was found!
+				refDocs = append(refDocs, models.Document{ID: doc.Id_, Index: doc.Index_, IndexType: "_doc", Source: doc.Source_})
+
+			}
+
+
+		}
+	}
+
+	for _, batch := range mgetBatches {
+	}
+
+
+	var findDocs bool
+	for _, doc := range docs {
+		sliceDoc := []GetQuery{doc}
+		findDocs = false
+
+		// id1 id2
+		// id1 id2
+
+		// id1 id2
+		// id2
+		// ....
+
+			responseDocs, err := worker.multiGetFindRefDocsV2(index, sliceDoc)
+			if err != nil {
+				zap.L().Error("multiGetFindRefDocs", zap.Error(err))
+			}
+			for _, d := range responseDocs.Docs {
+				//jsonString, err := jsoniter.Marshal(typedDoc)
+				//if err != nil {
+				//	zap.L().Error("update multiget unmarshal", zap.Error(err))
+				//	continue
+				//}
+
+				//var typedDocOk types.GetResult
+				//err = jsoniter.Unmarshal(jsonString, &typedDocOk)
+				//if err != nil {
+				//	zap.L().Error("update multiget unmarshal", zap.Error(err))
+				//	continue
+				//}
+				//if len(typedDocOk.Source_) == 0 {
+				//	continue
+				//}
+				//
+				//var source map[string]interface{}
+				//err = jsoniter.Unmarshal(typedDocOk.Source_, &source)
+				//if err != nil {
+				//	zap.L().Error("update multiget unmarshal", zap.Error(err))
+				//	continue
+				//}
+
+				if d.Found {
+					findDocs = true
+					refDocs = append(refDocs, models.Document{ID: d.Id_, Index: d.Index_, IndexType: "_doc", Source: d.Source_})
+					break
+				}
+
+			}
+
+			if findDocs {
+				break
+			}
+		}
+		if !findDocs {
+			refDocs = append(refDocs, models.Document{})
+		}
+	}
+
+	return refDocs, nil
+}
+
+type multiGetResponseItem struct {
+	//Fields       map[string]jsoniter.RawMessage `json:"fields,omitempty"`
+	Found  bool   `json:"found"`
+	Id_    string `json:"_id"`
+	Index_ string `json:"_index"`
+	//PrimaryTerm_ *int64                         `json:"_primary_term,omitempty"`
+	//Routing_     *string                        `json:"_routing,omitempty"`
+	//SeqNo_       *int64                         `json:"_seq_no,omitempty"`
+	Source_ map[string]interface{} `json:"_source,omitempty"`
+	//Version_     *int64                         `json:"_version,omitempty"`
+}
+
+type multiGetResponse struct {
+	Docs []multiGetResponseItem `json:"docs"`
+}
+
+// multiGetFindRefDocs part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false
+func (worker *IndexingWorkerV8) multiGetFindRefDocsV2(index string, queries map[string]GetQuery) (*multiGetResponse, error) {
+	if len(queries) == 0 {
+		return nil, errors.New("docs[] is empty")
+	}
+
+	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("index", index))
+
+	source := make(map[string]interface{})
+	sourceItems := make([]types.MgetOperation, len(queries))
+	i := 0
+	for id, _ := range queries {
+		sourceItems[i] = types.MgetOperation{Id_: id}
+		i++
+	}
+	source["docs"] = sourceItems
+
+	req := mget.NewRequest()
+	req.Docs = sourceItems
+
+	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
+	defer cancel()
+
+	response, err := worker.perfomMgetRequest(elasticsearchv8.C().Mget().Index(index).Request(req), ctx)
+	if err != nil {
+		zap.L().Warn("json encode source", zap.Error(err))
+	}
+
+	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("index", index), zap.String("status", "done"))
+
+	if err != nil || response.Docs == nil || len(response.Docs) == 0 {
+		zap.L().Error("MultiGet (self)", zap.Error(err))
+		return &multiGetResponse{Docs: make([]multiGetResponseItem, 0)}, err
+	}
+	return response, nil
+}
+
+func (worker *IndexingWorkerV8) perfomMgetRequest(r *mget.Mget, ctx context.Context) (*multiGetResponse, error) {
+	response := &multiGetResponse{}
+
+	res, err := r.Perform(ctx)
+	if err != nil {
+		return nil, err
+	}
+	defer res.Body.Close()
+
+	if res.StatusCode < 299 {
+		err = jsoniter.NewDecoder(res.Body).Decode(response)
+		if err != nil {
+			return nil, err
+		}
+		return response, nil
+	}
+
+	errorResponse := types.NewElasticsearchError()
+	err = jsoniter.NewDecoder(res.Body).Decode(errorResponse)
+	if err != nil {
+		return nil, err
+	}
+
+	return nil, errorResponse
+}
+
+// multiGetFindRefDocsFull part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false
 func (worker *IndexingWorkerV8) multiGetFindRefDocsFull(indices []string, docs []GetQuery) ([]models.Document, error) {
 	refDocs := make([]models.Document, 0)
+
 	var findDocs bool
 	for _, doc := range docs {
 		sliceDoc := []GetQuery{doc}
@@ -507,28 +561,6 @@ func (worker *IndexingWorkerV8) applyMerges(documents [][]UpdateCommand, refDocs
 	return push, nil
 }
 
-// multiGetFindRefDocs part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=true
-func (worker *IndexingWorkerV8) applyDirectMerges(updateCommandGroups [][]UpdateCommand, refDocs []models.Document) ([]models.Document, error) {
-
-	push := make([]models.Document, 0)
-	for i, updateCommandGroup := range updateCommandGroups {
-		var pushDoc models.Document
-		if len(refDocs) > i {
-			pushDoc = models.Document{ID: refDocs[i].ID, Index: refDocs[i].Index, IndexType: refDocs[i].IndexType, Source: refDocs[i].Source}
-		}
-		for _, command := range updateCommandGroup {
-			if pushDoc.ID == "" {
-				pushDoc = models.Document{ID: command.NewDoc.ID, Index: command.NewDoc.Index, IndexType: command.NewDoc.IndexType, Source: command.NewDoc.Source}
-			} else {
-				pushDoc = ApplyMergeLight(pushDoc, command)
-			}
-		}
-		push = append(push, pushDoc)
-	}
-
-	return push, nil
-}
-
 // buildBulkIndexItem all modes: ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false/true
 func buildBulkIndexItem(index string, id string, source interface{}) ([]string, error) {
 	lines := make([]string, 2)
@@ -628,49 +660,3 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 	}
 	return nil
 }
-
-// func (worker *IndexingWorkerV8) bulkIndexNew(docs []models.Document) error {
-
-// 	client := &elasticsearch.Client{
-// 		BaseClient: elasticsearchv8.C().BaseClient,
-// 	}
-// 	client.API = esapi.New(client)
-
-// 	bulkIndexer, err := esutil.NewBulkIndexer(esutil.BulkIndexerConfig{
-// 		Client: client,
-// 	})
-// 	if err != nil {
-// 		return err
-// 	}
-
-// 	for _, doc := range docs {
-// 		sourceStr, err := jsoniter.Marshal(doc.Source)
-// 		if err != nil {
-// 			return err
-// 		}
-// 		err = bulkIndexer.Add(context.Background(), esutil.BulkIndexerItem{
-// 			Index:      doc.Index,
-// 			DocumentID: doc.ID,
-// 			Body:       bytes.NewReader(sourceStr),
-// 			// OnSuccess: func(ctx context.Context, item esutil.BulkIndexerItem, res esutil.BulkIndexerResponseItem) {
-// 			// 	fmt.Printf("[%d] %s test/%s", res.Status, res.Result, item.DocumentID)
-// 			// },
-// 			OnFailure: func(ctx context.Context, item esutil.BulkIndexerItem, res esutil.BulkIndexerResponseItem, err error) {
-// 				if err != nil {
-// 					zap.L().Warn("Fail to index document to elasticsearch", zap.Error(err))
-// 				} else {
-// 					zap.L().Warn("Fail to index document to elasticsearch",
-// 						zap.String("errorType", res.Error.Type),
-// 						zap.String("errorReason", res.Error.Reason))
-// 				}
-// 			},
-// 		})
-// 		if err != nil {
-// 			return err
-// 		}
-// 	}
-
-// 	err = bulkIndexer.Close(context.Background())
-
-// 	zap.L().Info("bulk", zap.Any("stats", bulkIndexer.Stats()))
-// }
