@@ -40,8 +40,7 @@ type IndexingWorkerV8 struct {
 }
 
 // NewIndexingWorkerV8 returns a new IndexingWorkerV8
-func NewIndexingWorkerV8(typedIngester *TypedIngester, id int) *IndexingWorkerV8 {
-
+func NewIndexingWorkerV8(typedIngester *TypedIngester, id, mgetBatchSize int) *IndexingWorkerV8 {
 	var data chan UpdateCommand
 	if workerQueueSize := viper.GetInt("WORKER_QUEUE_BUFFER_SIZE"); workerQueueSize > 0 {
 		data = make(chan UpdateCommand, workerQueueSize)
@@ -53,6 +52,7 @@ func NewIndexingWorkerV8(typedIngester *TypedIngester, id int) *IndexingWorkerV8
 		Uuid:                                     uuid.New(),
 		TypedIngester:                            typedIngester,
 		ID:                                       id,
+		mgetBatchSize:                            mgetBatchSize,
 		Data:                                     data,
 		metricWorkerQueueGauge:                   _metricWorkerQueueGauge.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
 		metricWorkerMessage:                      _metricWorkerMessage.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
@@ -279,28 +279,27 @@ func (worker *IndexingWorkerV8) getIndices(documentType string) ([]string, error
 func (worker *IndexingWorkerV8) multiGetFindRefDocsFullV2(indices []string, docs []GetQuery) (map[string]models.Document, error) {
 	refDocs := map[string]models.Document{}
 	var mgetBatches []map[string]GetQuery
-
-	// create batches
 	currentMgetBatch := map[string]GetQuery{}
 
 	for i := 0; i < len(docs); i++ {
-		if i != 0 && i%worker.mgetBatchSize == 0 {
+		if i != 0 && worker.mgetBatchSize != 0 && i%worker.mgetBatchSize == 0 {
 			mgetBatches = append(mgetBatches, currentMgetBatch)
 			currentMgetBatch = map[string]GetQuery{}
 		}
 
 		currentMgetBatch[docs[i].ID] = docs[i]
 	}
+	mgetBatches = append(mgetBatches, currentMgetBatch)
 
 	// all batches must be checked on all indices,
 	// so we loop on indices and then on batches
-	for _, index := range indices {
+	for _, idx := range indices {
 		for _, batch := range mgetBatches {
 			if len(batch) == 0 {
 				continue
 			}
 
-			responseDocs, err := worker.multiGetFindRefDocsV2(index, batch)
+			responseDocs, err := worker.multiGetFindRefDocsV2(idx, batch)
 			if err != nil {
 				zap.L().Error("multiGetFindRefDocs", zap.Error(err))
 			}
@@ -318,7 +317,7 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsFullV2(indices []string, docs
 			}
 
 			// Should we?
-			mgetBatches = worker.reorderBatches(mgetBatches)
+			// mgetBatches = worker.reorderBatches(mgetBatches)
 
 		}
 	}
@@ -326,6 +325,7 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsFullV2(indices []string, docs
 	return refDocs, nil
 }
 
+// reorderBatches FIXME: not really optimised, should not be used, but rewritten
 func (worker *IndexingWorkerV8) reorderBatches(mgetBatch []map[string]GetQuery) []map[string]GetQuery {
 	// here we reorder the batches, so that the first batch is the one with the most found documents (to avoid useless requests)
 	// the first must always have the most but limited by worker.mgetBatchSize
@@ -623,7 +623,7 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 		return err
 	}
 	if res.IsError() {
-		zap.L().Error("error")
+		zap.L().Error("error", zap.Strings("warnings", res.Warnings()), zap.String("response", res.String()))
 		return errors.New("error during bulkrequest")
 	}
 

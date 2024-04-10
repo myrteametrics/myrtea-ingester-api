@@ -84,9 +84,13 @@ ELASTICSEARCH_HTTP_TIMEOUT = "1m"
 # Default value: false
 ELASTICSEARCH_DIRECT_MULTI_GET_MODE = "false"
 
+# How many documents will be in the mget request of each batch (max)
+# Default value: 1000
+ELASTICSEARCH_MGET_BATCH_SIZE = "500"
+
 # Specify the maximum number of concurrent worker by type of ingested document (1 type of document = n workers)
 # Default value: 2
-INGESTER_MAXIMUM_WORKERS = "1"
+INGESTER_MAXIMUM_WORKERS = "2"
 
 # Specify the typed-ingesters maximum queue size
 # Default value: "5000"

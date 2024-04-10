@@ -86,10 +86,6 @@ func main() {
 
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
 
-	go time.AfterFunc(3*time.Minute, func() {
-		done <- os.Interrupt
-	})
-
 	go func() {
 		var err error
 		if serverEnableTLS {
