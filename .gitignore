@@ -36,8 +36,3 @@ Gopkg.toml
 version
 
 /certs
-
-save_docs.json
-save_docs1.json
-save_docs2.json
-main_test.go
