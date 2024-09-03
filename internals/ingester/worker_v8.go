@@ -14,9 +14,9 @@ import (
 	"github.com/go-kit/kit/metrics"
 	"github.com/google/uuid"
 	jsoniter "github.com/json-iterator/go"
-	"github.com/myrteametrics/myrtea-sdk/v4/elasticsearchv8"
-	"github.com/myrteametrics/myrtea-sdk/v4/index"
-	"github.com/myrteametrics/myrtea-sdk/v4/models"
+	"github.com/myrteametrics/myrtea-sdk/v5/elasticsearch"
+	"github.com/myrteametrics/myrtea-sdk/v5/index"
+	"github.com/myrteametrics/myrtea-sdk/v5/models"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )
@@ -247,7 +247,7 @@ func (worker *IndexingWorkerV8) getIndices(documentType string) ([]string, error
 
 	alias := buildAliasName(documentType, index.Patch)
 
-	res, err := esapi.IndicesGetAliasRequest{Name: []string{alias}}.Do(ctx, elasticsearchv8.C())
+	res, err := esapi.IndicesGetAliasRequest{Name: []string{alias}}.Do(ctx, elasticsearch.C())
 	if err != nil {
 		zap.L().Error("", zap.Error(err))
 		return make([]string, 0), errors.New("alias not found")
@@ -394,7 +394,7 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsV2(index string, queries map[
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
-	response, err := worker.perfomMgetRequest(elasticsearchv8.C().Mget().Index(index).Request(req), ctx)
+	response, err := worker.perfomMgetRequest(elasticsearch.C().Mget().Index(index).Request(req), ctx)
 	if err != nil {
 		zap.L().Warn("json encode source", zap.Error(err))
 	}
@@ -448,8 +448,7 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsFull(indices []string, docs [
 			if err != nil {
 				zap.L().Error("multiGetFindRefDocs", zap.Error(err))
 			}
-			for i, d := range responseDocs {
-				_ = i
+			for _, d := range responseDocs {
 				switch typedDoc := d.(type) {
 				case map[string]interface{}:
 					jsonString, err := jsoniter.Marshal(typedDoc)
@@ -502,7 +501,7 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsFull(indices []string, docs [
 }
 
 // multiGetFindRefDocs part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false
-func (worker *IndexingWorkerV8) multiGetFindRefDocs(index string, queries []GetQuery) ([]types.ResponseItem, error) {
+func (worker *IndexingWorkerV8) multiGetFindRefDocs(index string, queries []GetQuery) ([]types.MgetResponseItem, error) {
 	if len(queries) == 0 {
 		return nil, errors.New("docs[] is empty")
 	}
@@ -522,7 +521,7 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocs(index string, queries []GetQ
 
 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
 	defer cancel()
-	response, err := elasticsearchv8.C().Mget().Index(index).Request(req).Do(ctx)
+	response, err := elasticsearch.C().Mget().Index(index).Request(req).Do(ctx)
 	if err != nil {
 		zap.L().Warn("json encode source", zap.Error(err))
 	}
@@ -532,7 +531,7 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocs(index string, queries []GetQ
 
 	if err != nil || response.Docs == nil || len(response.Docs) == 0 {
 		zap.L().Error("MultiGet (self)", zap.Error(err))
-		return make([]types.ResponseItem, 0), err
+		return make([]types.MgetResponseItem, 0), err
 	}
 	return response.Docs, nil
 }
@@ -571,8 +570,8 @@ func (worker *IndexingWorkerV8) applyMerges(documents [][]UpdateCommand, refDocs
 func buildBulkIndexItem(index string, id string, source interface{}) ([]string, error) {
 	lines := make([]string, 2)
 
-	meta := elasticsearchv8.BulkIndexMeta{
-		Index: elasticsearchv8.BulkIndexMetaDetail{
+	meta := elasticsearch.BulkIndexMeta{
+		Index: elasticsearch.BulkIndexMetaDetail{
 			S_Index: index,
 			S_Type:  "_doc",
 			S_Id:    id,
@@ -615,7 +614,7 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 	worker.metricWorkerBulkIndexBuildBufferDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
 
 	start = time.Now()
-	res, err := esapi.BulkRequest{Body: buf}.Do(ctx, elasticsearchv8.C())
+	res, err := esapi.BulkRequest{Body: buf}.Do(ctx, elasticsearch.C())
 	worker.metricWorkerBulkInsertDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
 
 	if err != nil {
@@ -630,7 +629,7 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 	zap.L().Debug("Executing bulkindex", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("status", "done"))
 
 	// var r map[string]interface{}
-	var r elasticsearchv8.BulkIndexResponse
+	var r elasticsearch.BulkIndexResponse
 	if err = jsoniter.NewDecoder(res.Body).Decode(&r); err != nil {
 		zap.L().Error("decode bulk response", zap.Error(err))
 		return err

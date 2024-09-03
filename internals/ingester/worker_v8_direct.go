@@ -5,8 +5,8 @@ import (
 	"github.com/elastic/go-elasticsearch/v8/typedapi/core/mget"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/some"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
-	"github.com/myrteametrics/myrtea-sdk/v4/elasticsearchv8"
-	"github.com/myrteametrics/myrtea-sdk/v4/models"
+	"github.com/myrteametrics/myrtea-sdk/v5/elasticsearch"
+	"github.com/myrteametrics/myrtea-sdk/v5/models"
 	"go.uber.org/zap"
 	"time"
 )
@@ -90,7 +90,7 @@ func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]Updat
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("status", "done"))
-	response, err := worker.perfomMgetRequest(elasticsearchv8.C().Mget().Request(req), ctx)
+	response, err := worker.perfomMgetRequest(elasticsearch.C().Mget().Request(req), ctx)
 	if err != nil {
 		zap.L().Warn("perfomMgetRequest", zap.Error(err))
 	}

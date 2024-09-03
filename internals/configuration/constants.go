@@ -1,6 +1,6 @@
 package config
 
-import "github.com/myrteametrics/myrtea-sdk/v4/helpers"
+import "github.com/myrteametrics/myrtea-sdk/v5/helpers"
 
 // ConfigPath is the toml configuration file path
 var ConfigPath = "config"

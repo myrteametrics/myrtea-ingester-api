@@ -1,8 +1,8 @@
 package ingester
 
 import (
-	"github.com/myrteametrics/myrtea-sdk/v4/connector"
-	"github.com/myrteametrics/myrtea-sdk/v4/models"
+	"github.com/myrteametrics/myrtea-sdk/v5/connector"
+	"github.com/myrteametrics/myrtea-sdk/v5/models"
 )
 
 // UpdateCommand wrap all infos required to update a document in elasticsearch

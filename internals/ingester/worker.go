@@ -7,9 +7,9 @@ import (
 
 	"github.com/go-kit/kit/metrics"
 	"github.com/go-kit/kit/metrics/prometheus"
-	"github.com/myrteametrics/myrtea-sdk/v4/connector"
-	"github.com/myrteametrics/myrtea-sdk/v4/index"
-	"github.com/myrteametrics/myrtea-sdk/v4/models"
+	"github.com/myrteametrics/myrtea-sdk/v5/connector"
+	"github.com/myrteametrics/myrtea-sdk/v5/index"
+	"github.com/myrteametrics/myrtea-sdk/v5/models"
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
@@ -26,8 +26,6 @@ func NewIndexingWorker(typedIngester *TypedIngester, id int) (IndexingWorker, er
 	version := viper.GetInt("ELASTICSEARCH_VERSION")
 	mgetBatchSize := viper.GetInt("ELASTICSEARCH_MGET_BATCH_SIZE")
 	switch version {
-	case 6:
-		return NewIndexingWorkerV6(typedIngester, id), nil
 	case 7:
 		fallthrough
 	case 8:
