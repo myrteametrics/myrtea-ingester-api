@@ -21,6 +21,7 @@ var AllowedConfigKey = [][]helpers.ConfigKey{
 	{
 		{Type: helpers.StringFlag, Name: "ELASTICSEARCH_HTTP_TIMEOUT", DefaultValue: "1m", Description: "Elasticsearch HTTP Client timeout"},
 		{Type: helpers.StringFlag, Name: "ELASTICSEARCH_DIRECT_MULTI_GET_MODE", DefaultValue: "true", Description: "Elasticsearch direct multi-get mode enabled"},
+		{Type: helpers.StringFlag, Name: "ELASTICSEARCH_MGET_BATCH_SIZE", DefaultValue: "1000", Description: "Elasticsearch Mget max batch size"},
 		{Type: helpers.StringFlag, Name: "INGESTER_MAXIMUM_WORKERS", DefaultValue: "2", Description: "Typed Ingester's maximum parallel workers"},
 		{Type: helpers.StringFlag, Name: "TYPEDINGESTER_QUEUE_BUFFER_SIZE", DefaultValue: "5000", Description: "Typed ingester's internal queue size"},
 		{Type: helpers.StringFlag, Name: "WORKER_QUEUE_BUFFER_SIZE", DefaultValue: "5000", Description: "Worker's internal queue size"},

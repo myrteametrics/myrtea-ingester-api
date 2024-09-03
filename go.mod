@@ -8,6 +8,7 @@ require (
 	github.com/go-chi/chi/v5 v5.0.8
 	github.com/go-kit/kit v0.12.0
 	github.com/golang/protobuf v1.5.3
+	github.com/google/go-cmp v0.5.9
 	github.com/google/uuid v1.3.0
 	github.com/json-iterator/go v1.1.12
 	github.com/myrteametrics/myrtea-sdk/v4 v4.6.0
