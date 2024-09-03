@@ -35,6 +35,7 @@ type IndexingWorkerV6 struct {
 }
 
 // NewIndexingWorkerV6 returns a new IndexingWorkerV6
+// Deprecated
 func NewIndexingWorkerV6(typedIngester *TypedIngester, id int) *IndexingWorkerV6 {
 
 	var data chan UpdateCommand
