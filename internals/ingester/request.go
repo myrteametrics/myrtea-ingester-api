@@ -1,8 +1,8 @@
 package ingester
 
 import (
-	"github.com/myrteametrics/myrtea-sdk/v4/connector"
-	"github.com/myrteametrics/myrtea-sdk/v4/models"
+	"github.com/myrteametrics/myrtea-sdk/v5/connector"
+	"github.com/myrteametrics/myrtea-sdk/v5/models"
 )
 
 // IngestRequest wrap a single ingestion request (one document with one mergeconfig)

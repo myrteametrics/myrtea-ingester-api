@@ -3,7 +3,7 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/myrteametrics/myrtea-sdk/v4/connector"
+	"github.com/myrteametrics/myrtea-sdk/v5/connector"
 	"net/http"
 	"os"
 	"os/signal"
@@ -13,9 +13,9 @@ import (
 	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/app"
 	config "github.com/myrteametrics/myrtea-ingester-api/v5/internals/configuration"
 	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/routes"
-	"github.com/myrteametrics/myrtea-sdk/v4/helpers"
-	"github.com/myrteametrics/myrtea-sdk/v4/router"
-	"github.com/myrteametrics/myrtea-sdk/v4/server"
+	"github.com/myrteametrics/myrtea-sdk/v5/helpers"
+	"github.com/myrteametrics/myrtea-sdk/v5/router"
+	"github.com/myrteametrics/myrtea-sdk/v5/server"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
 )

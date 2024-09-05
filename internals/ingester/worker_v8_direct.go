@@ -5,16 +5,18 @@ import (
 	"github.com/elastic/go-elasticsearch/v8/typedapi/core/mget"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/some"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
-	"github.com/myrteametrics/myrtea-sdk/v4/elasticsearchv8"
-	"github.com/myrteametrics/myrtea-sdk/v4/models"
+	"github.com/myrteametrics/myrtea-sdk/v5/elasticsearch"
+	"github.com/myrteametrics/myrtea-sdk/v5/models"
 	"go.uber.org/zap"
 	"time"
 )
 
 // directBulkChainedUpdate part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=true
 func (worker *IndexingWorkerV8) directBulkChainedUpdate(updateCommandGroups [][]UpdateCommand) {
-	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "starting"))
-	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "directMultiGetDocs"))
+	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+		zap.Int("WorkerID", worker.ID), zap.String("step", "starting"))
+	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+		zap.Int("WorkerID", worker.ID), zap.String("step", "directMultiGetDocs"))
 
 	start := time.Now()
 	refDocs, err := worker.directMultiGetDocs(updateCommandGroups)
@@ -24,7 +26,8 @@ func (worker *IndexingWorkerV8) directBulkChainedUpdate(updateCommandGroups [][]
 		zap.L().Error("directMultiGetDocs", zap.Error(err))
 	}
 
-	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
+	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+		zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
 
 	start = time.Now()
 	push, err := worker.applyDirectMerges(updateCommandGroups, refDocs)
@@ -34,7 +37,8 @@ func (worker *IndexingWorkerV8) directBulkChainedUpdate(updateCommandGroups [][]
 		zap.L().Error("applyDirectMerges", zap.Error(err))
 	}
 
-	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "bulkIndex"))
+	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+		zap.Int("WorkerID", worker.ID), zap.String("step", "bulkIndex"))
 
 	start = time.Now()
 	err = worker.bulkIndex(push)
@@ -43,12 +47,12 @@ func (worker *IndexingWorkerV8) directBulkChainedUpdate(updateCommandGroups [][]
 	if err != nil {
 		zap.L().Error("bulkIndex", zap.Error(err))
 	}
-	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("step", "done"))
+	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+		zap.Int("WorkerID", worker.ID), zap.String("step", "done"))
 }
 
-// multiGetFindRefDocs part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=true
+// applyDirectMerges part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=true
 func (worker *IndexingWorkerV8) applyDirectMerges(updateCommandGroups [][]UpdateCommand, refDocs []models.Document) ([]models.Document, error) {
-
 	push := make([]models.Document, 0)
 	for i, updateCommandGroup := range updateCommandGroups {
 		var pushDoc models.Document
@@ -90,13 +94,9 @@ func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]Updat
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("status", "done"))
-	response, err := worker.perfomMgetRequest(elasticsearchv8.C().Mget().Request(req), ctx)
-	if err != nil {
-		zap.L().Warn("perfomMgetRequest", zap.Error(err))
-	}
-
+	response, err := worker.perfomMgetRequest(elasticsearch.C().Mget().Request(req), ctx)
 	if err != nil || response.Docs == nil || len(response.Docs) == 0 {
-		zap.L().Error("MultiGet (self)", zap.Error(err))
+		zap.L().Error("perfomMgetRequest (self)", zap.Error(err))
 	}
 
 	refDocs := make([]models.Document, 0)
@@ -108,22 +108,10 @@ func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]Updat
 		}
 
 		if d.Found {
-			refDocs = append(refDocs, models.Document{ID: d.Id_, Index: d.Index_, IndexType: "_doc", Source: source})
+			refDocs = append(refDocs, models.Document{ID: d.Id_, Index: d.Index_, IndexType: "_doc", Source: d.Source_})
 		} else {
 			refDocs = append(refDocs, models.Document{})
 		}
-
-		// if len(refDocs) > i && refDocs[i].ID == "" {
-		// 	if typedDocOk.Found {
-		// 		refDocs[i] = models.Document{ID: typedDocOk.Id_, Index: typedDocOk.Index_, IndexType: "_doc", Source: source}
-		// 	}
-		// } else {
-		// 	if typedDocOk.Found {
-		// 		refDocs = append(refDocs, models.Document{ID: typedDocOk.Id_, Index: typedDocOk.Index_, IndexType: "_doc", Source: source})
-		// 	} else {
-		// 		refDocs = append(refDocs, models.Document{})
-		// 	}
-		// }
 	}
 
 	return refDocs, nil
