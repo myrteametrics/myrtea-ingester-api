@@ -10,7 +10,7 @@ require (
 	github.com/golang/protobuf v1.5.3
 	github.com/google/uuid v1.6.0
 	github.com/json-iterator/go v1.1.12
-	github.com/myrteametrics/myrtea-sdk/v5 v5.0.7
+	github.com/myrteametrics/myrtea-sdk/v5 v5.0.8
 	github.com/prometheus/client_golang v1.20.2
 	github.com/spf13/viper v1.19.0
 	github.com/swaggo/swag v1.16.3
@@ -105,5 +105,3 @@ require (
 	gopkg.in/ini.v1 v1.67.0 // indirect
 	gopkg.in/yaml.v3 v3.0.1 // indirect
 )
-
-replace github.com/myrteametrics/myrtea-sdk/v5 => ../myrtea-sdk
