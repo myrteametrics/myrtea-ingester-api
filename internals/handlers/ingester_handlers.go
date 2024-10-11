@@ -1,6 +1,7 @@
 package handlers
 
 import (
+	"errors"
 	jsoniter "github.com/json-iterator/go"
 	"net/http"
 
@@ -53,10 +54,12 @@ func (handler *IngesterHandler) ReceiveData(w http.ResponseWriter, r *http.Reque
 
 	err = handler.bulkIngester.Ingest(bir)
 	if err != nil {
-		if err.Error() == "channel overload" { // Replace with custom error
+		if errors.Is(err, ingester.ErrChannelOverload) {
 			w.WriteHeader(http.StatusTooManyRequests)
 		} else if err.Error() == "elasticsearch healthcheck red" { // Replace with custom error
 			w.WriteHeader(http.StatusInternalServerError)
+		} else if errors.Is(err, ingester.ErrDocumentTypeEmpty) {
+			w.WriteHeader(http.StatusBadRequest)
 		}
 		return
 	}

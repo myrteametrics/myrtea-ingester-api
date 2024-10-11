@@ -9,6 +9,11 @@ import (
 	"go.uber.org/zap"
 )
 
+var (
+	ErrChannelOverload   = errors.New("channel overload")
+	ErrDocumentTypeEmpty = errors.New("document type is empty")
+)
+
 // BulkIngester is a component which split BulkIngestRequest and affect the resulting IngestRequests to dedicated TypedIngester
 // As a chokepoint, it doesn't do much processing and only acts as a request router
 type BulkIngester struct {
@@ -44,6 +49,10 @@ func (ingester *BulkIngester) getTypedIngester(targetDocumentType string) *Typed
 func (ingester *BulkIngester) Ingest(bir BulkIngestRequest) error {
 	zap.L().Debug("Processing BulkIngestRequest", zap.String("BulkUUID", bir.UUID))
 
+	if bir.DocumentType == "" {
+		return ErrDocumentTypeEmpty
+	}
+
 	mergeConfig := bir.MergeConfig[0]
 	typedIngester := ingester.getTypedIngester(bir.DocumentType)
 
@@ -53,7 +62,7 @@ func (ingester *BulkIngester) Ingest(bir BulkIngestRequest) error {
 		for _, worker := range typedIngester.Workers {
 			worker.GetMetricWorkerQueueGauge().Set(float64(len(worker.GetData())))
 		}
-		return errors.New("channel overload") // Replace with custom error
+		return ErrChannelOverload
 	}
 
 	for i, doc := range bir.Docs {
