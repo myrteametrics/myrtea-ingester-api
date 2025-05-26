@@ -5,7 +5,7 @@ import (
 	jsoniter "github.com/json-iterator/go"
 	"net/http"
 
-	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/ingester"
+	"github.com/myrteametrics/myrtea-ingester-api/v5/internal/ingester"
 
 	"go.uber.org/zap"
 )

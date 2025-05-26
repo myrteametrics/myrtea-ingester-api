@@ -3,7 +3,7 @@ package ingester
 import (
 	"context"
 	"github.com/elastic/go-elasticsearch/v8/esapi"
-	config "github.com/myrteametrics/myrtea-ingester-api/v5/internals/configuration"
+	config "github.com/myrteametrics/myrtea-ingester-api/v5/internal/configuration"
 	"github.com/myrteametrics/myrtea-sdk/v5/connector"
 	"github.com/myrteametrics/myrtea-sdk/v5/elasticsearch"
 	"github.com/myrteametrics/myrtea-sdk/v5/helpers"
