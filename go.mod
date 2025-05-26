@@ -10,7 +10,7 @@ require (
 	github.com/go-kit/kit v0.13.0
 	github.com/google/uuid v1.6.0
 	github.com/json-iterator/go v1.1.12
-	github.com/myrteametrics/myrtea-sdk/v5 v5.2.7
+	github.com/myrteametrics/myrtea-sdk/v5 v5.2.7-0.20250526093505-56813c6fee95
 	github.com/prometheus/client_golang v1.22.0
 	github.com/spf13/viper v1.20.1
 	github.com/swaggo/swag v1.16.4
