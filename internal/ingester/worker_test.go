@@ -2,6 +2,8 @@ package ingester
 
 import (
 	"context"
+	"testing"
+
 	"github.com/elastic/go-elasticsearch/v8/esapi"
 	config "github.com/myrteametrics/myrtea-ingester-api/v5/internal/configuration"
 	"github.com/myrteametrics/myrtea-sdk/v5/connector"
@@ -9,7 +11,6 @@ import (
 	"github.com/myrteametrics/myrtea-sdk/v5/helpers"
 	"github.com/myrteametrics/myrtea-sdk/v5/models"
 	"github.com/spf13/viper"
-	"testing"
 )
 
 func TestDirectBulkChainedUpdate2(t *testing.T) {

@@ -2,13 +2,14 @@ package ingester
 
 import (
 	"context"
+	"time"
+
 	"github.com/elastic/go-elasticsearch/v8/typedapi/core/mget"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/some"
 	"github.com/elastic/go-elasticsearch/v8/typedapi/types"
 	"github.com/myrteametrics/myrtea-sdk/v5/elasticsearch"
 	"github.com/myrteametrics/myrtea-sdk/v5/models"
 	"go.uber.org/zap"
-	"time"
 )
 
 // directBulkChainedUpdate part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=true

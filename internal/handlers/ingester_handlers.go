@@ -2,8 +2,9 @@ package handlers
 
 import (
 	"errors"
-	jsoniter "github.com/json-iterator/go"
 	"net/http"
+
+	jsoniter "github.com/json-iterator/go"
 
 	"github.com/myrteametrics/myrtea-ingester-api/v5/internal/ingester"
 
