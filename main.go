@@ -3,12 +3,13 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/myrteametrics/myrtea-sdk/v5/connector"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
+
+	"github.com/myrteametrics/myrtea-sdk/v5/connector"
 
 	"github.com/myrteametrics/myrtea-ingester-api/v5/internal/app"
 	config "github.com/myrteametrics/myrtea-ingester-api/v5/internal/configuration"
