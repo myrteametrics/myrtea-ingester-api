@@ -1,5 +1,6 @@
 # See reference : https://raw.githubusercontent.com/golangci/golangci-lint/master/.golangci.reference.yml
 # See configuration : https://golangci-lint.run/usage/configuration/
+version: "2"
 
 # Options for analysis running.
 run:
@@ -15,7 +16,7 @@ run:
   skip-files:
     - ".*\\.pb\\.go$"
   # allow-parallel-runners: false
-  go: '1.20'
+  go: '1.25'
 
 issues:
   max-issues-per-linter: 0
@@ -45,26 +46,26 @@ linters:
   # - dupword # NO AUTO-FIX : checks for duplicate words in the source code [fast: true, auto-fix: true]
   
   enable-all: true
-  disable: 
-  - ifshort # deprecated
-  - nosnakecase # deprecated
-  - scopelint # deprecated
-  - deadcode # deprecated by owner
-  - structcheck # deprecated by owner
-  - golint # deprecated by owner
-  - interfacer # deprecated by owner
-  - exhaustivestruct # deprecated by owner
-  - maligned # deprecated by owner
-  - varcheck # deprecated by owner
-  
-  # large codebase fix
-  # - wsl # large (whitespace handling / line break on right spot)
-  # - nlreturn # large (line break before a return)
-  # - lll # large (line too long)
-  
-  # non-opinionated
-  - testpackage
-  - paralleltest # Should everything runnable
-  
-  # not applicable
-  - ireturn
+  disable:
+    - ifshort # deprecated
+    - nosnakecase # deprecated
+    - scopelint # deprecated
+    - deadcode # deprecated by owner
+    - structcheck # deprecated by owner
+    - golint # deprecated by owner
+    - interfacer # deprecated by owner
+    - exhaustivestruct # deprecated by owner
+    - maligned # deprecated by owner
+    - varcheck # deprecated by owner
+    
+    # large codebase fix
+    # - wsl # large (whitespace handling / line break on right spot)
+    # - nlreturn # large (line break before a return)
+    # - lll # large (line too long)
+    
+    # non-opinionated
+    - testpackage
+    - paralleltest # Should everything runnable
+    
+    # not applicable
+    - ireturn
