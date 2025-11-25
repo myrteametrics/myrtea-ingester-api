@@ -53,7 +53,8 @@ func (worker *IndexingWorkerV8) directBulkChainedUpdate(updateCommandGroups [][]
 }
 
 // applyDirectMerges part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=true
-func (worker *IndexingWorkerV8) applyDirectMerges(updateCommandGroups [][]UpdateCommand, refDocs []models.Document) ([]models.Document, error) {
+func (worker *IndexingWorkerV8) applyDirectMerges(updateCommandGroups [][]UpdateCommand,
+	refDocs []models.Document) ([]models.Document, error) {
 	push := make([]models.Document, 0)
 	for i, updateCommandGroup := range updateCommandGroups {
 		var pushDoc models.Document

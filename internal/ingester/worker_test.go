@@ -55,7 +55,10 @@ func TestDirectBulkChainedUpdate(t *testing.T) {
 	typedIngester := &TypedIngester{DocumentType: "document"}
 	indexingWorker := NewIndexingWorkerV8(typedIngester, 1, 500)
 
-	mergeConfig := connector.Config{Type: "document", Mode: connector.Self, ExistingAsMaster: true, Groups: []connector.Group{{FieldReplace: []string{"update"}}}}
+	mergeConfig := connector.Config{
+		Type: "document", Mode: connector.Self, ExistingAsMaster: true,
+		Groups: []connector.Group{{FieldReplace: []string{"update"}}},
+	}
 	buffer := []UpdateCommand{
 		{
 			Index: "myindex", DocumentID: "1", DocumentType: "document", MergeConfig: mergeConfig,

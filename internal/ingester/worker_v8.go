@@ -49,21 +49,33 @@ func NewIndexingWorkerV8(typedIngester *TypedIngester, id, mgetBatchSize int) *I
 		data = make(chan UpdateCommand)
 	}
 
+	initHisto := func(h metrics.Histogram) metrics.Histogram {
+		return h.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id))
+	}
+
+	initGauge := func(g metrics.Gauge) metrics.Gauge {
+		return g.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id))
+	}
+
+	initCounter := func(c metrics.Counter) metrics.Counter {
+		return c.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id))
+	}
+
 	worker := &IndexingWorkerV8{
 		UUID:                                     uuid.New(),
 		TypedIngester:                            typedIngester,
 		ID:                                       id,
 		mgetBatchSize:                            mgetBatchSize,
 		Data:                                     data,
-		metricWorkerQueueGauge:                   _metricWorkerQueueGauge.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerMessage:                      _metricWorkerMessage.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerFlushDuration:                _metricWorkerFlushDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerBulkInsertDuration:           _metricWorkerBulkInsertDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerBulkIndexDuration:            _metricWorkerBulkIndexDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerApplyMergesDuration:          _metricWorkerApplyMergesDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerDirectMultiGetDuration:       _metricWorkerDirectMultiGetDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerBulkIndexBuildBufferDuration: _metricWorkerBulkIndexBuildBufferDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
-		metricWorkerGetIndicesDuration:           _metricWorkerGetIndicesDuration.With("typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)),
+		metricWorkerQueueGauge:                   initGauge(_metricWorkerQueueGauge),
+		metricWorkerMessage:                      initCounter(_metricWorkerMessage),
+		metricWorkerFlushDuration:                initHisto(_metricWorkerFlushDuration),
+		metricWorkerBulkInsertDuration:           initHisto(_metricWorkerBulkInsertDuration),
+		metricWorkerBulkIndexDuration:            initHisto(_metricWorkerBulkIndexDuration),
+		metricWorkerApplyMergesDuration:          initHisto(_metricWorkerApplyMergesDuration),
+		metricWorkerDirectMultiGetDuration:       initHisto(_metricWorkerDirectMultiGetDuration),
+		metricWorkerBulkIndexBuildBufferDuration: initHisto(_metricWorkerBulkIndexBuildBufferDuration),
+		metricWorkerGetIndicesDuration:           initHisto(_metricWorkerGetIndicesDuration),
 	}
 	worker.metricWorkerQueueGauge.Set(0)
 	worker.metricWorkerMessage.With("status", "flushed").Add(0)

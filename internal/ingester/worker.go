@@ -92,7 +92,8 @@ var (
 )
 
 func ApplyMergeLight(doc models.Document, command UpdateCommand) models.Document {
-	zap.L().Debug("ApplyMerge", zap.String("mergeMode", command.MergeConfig.Mode.String()), zap.Any("doc", doc), zap.Any("command", command))
+	zap.L().Debug("ApplyMerge", zap.String("mergeMode", command.MergeConfig.Mode.String()),
+		zap.Any("doc", doc), zap.Any("command", command))
 
 	switch command.MergeConfig.Mode {
 	case connector.Self:
