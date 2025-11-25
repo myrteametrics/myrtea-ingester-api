@@ -10,11 +10,6 @@ run:
   # tests: false
   # build-tags:
   #   - mytag
-  skip-dirs:
-    - protobuf
-  skip-dirs-use-default: false
-  skip-files:
-    - ".*\\.pb\\.go$"
   # allow-parallel-runners: false
   go: "1.25"
 
@@ -22,14 +17,20 @@ issues:
   max-issues-per-linter: 0
   max-same-issues: 0
   fix: false
+  exclude-dirs:
+    - protobuf
+  exclude-dirs-use-default: false
+  exclude-files:
+    - ".*\\.pb\\.go$"
+  uniq-by-line: true
 
 # severity:
 
 output:
-  format: colored-line-number
+  formats:
+    format: colored-line-number
   print-issued-lines: true
   print-linter-name: true
-  uniq-by-line: true
   path-prefix: ""
 
 linters:
@@ -47,17 +48,6 @@ linters:
   
   enable-all: true
   disable:
-    - ifshort # deprecated
-    - nosnakecase # deprecated
-    - scopelint # deprecated
-    - deadcode # deprecated by owner
-    - structcheck # deprecated by owner
-    - golint # deprecated by owner
-    - interfacer # deprecated by owner
-    - exhaustivestruct # deprecated by owner
-    - maligned # deprecated by owner
-    - varcheck # deprecated by owner
-    
     # large codebase fix
     # - wsl # large (whitespace handling / line break on right spot)
     # - nlreturn # large (line break before a return)
