@@ -11,9 +11,9 @@ import (
 
 	"github.com/myrteametrics/myrtea-sdk/v5/connector"
 
-	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/app"
-	config "github.com/myrteametrics/myrtea-ingester-api/v5/internals/configuration"
-	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/routes"
+	"github.com/myrteametrics/myrtea-ingester-api/v5/internal/app"
+	config "github.com/myrteametrics/myrtea-ingester-api/v5/internal/configuration"
+	"github.com/myrteametrics/myrtea-ingester-api/v5/internal/routes"
 	"github.com/myrteametrics/myrtea-sdk/v5/helpers"
 	"github.com/myrteametrics/myrtea-sdk/v5/router"
 	"github.com/myrteametrics/myrtea-sdk/v5/server"

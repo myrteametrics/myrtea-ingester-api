@@ -5,7 +5,7 @@ import (
 	"testing"
 
 	"github.com/elastic/go-elasticsearch/v8/esapi"
-	config "github.com/myrteametrics/myrtea-ingester-api/v5/internals/configuration"
+	config "github.com/myrteametrics/myrtea-ingester-api/v5/internal/configuration"
 	"github.com/myrteametrics/myrtea-sdk/v5/connector"
 	"github.com/myrteametrics/myrtea-sdk/v5/elasticsearch"
 	"github.com/myrteametrics/myrtea-sdk/v5/helpers"
@@ -20,12 +20,8 @@ func TestDirectBulkChainedUpdate2(t *testing.T) {
 	helpers.InitializeConfig(config.AllowedConfigKey, config.ConfigName, config.ConfigPath, config.EnvPrefix)
 	helpers.InitLogger(viper.GetBool("LOGGER_PRODUCTION"))
 
-	// executor, _ := elasticsearch.NewEsExecutor(context.Background(), []string{""})
-	// bulkIngester := NewBulkIngester(executor)
-	// typedIngester := NewTypedIngester(bulkIngester, "document")
 	typedIngester := &TypedIngester{DocumentType: "document"}
 	indexingWorker := NewIndexingWorkerV8(typedIngester, 1, 500)
-	// indexingWorker := IndexingWorker{}
 
 	esapi.IndicesDeleteRequest{AllowNoIndices: esapi.BoolPtr(true), Index: []string{"myindex"}}.Do(context.Background(), elasticsearch.C())
 	esapi.IndicesDeleteRequest{AllowNoIndices: esapi.BoolPtr(true), Index: []string{"myotherindex"}}.Do(context.Background(), elasticsearch.C())
@@ -47,12 +43,8 @@ func TestDirectBulkChainedUpdate(t *testing.T) {
 	helpers.InitializeConfig(config.AllowedConfigKey, config.ConfigName, config.ConfigPath, config.EnvPrefix)
 	helpers.InitLogger(viper.GetBool("LOGGER_PRODUCTION"))
 
-	// executor, _ := elasticsearch.NewEsExecutor(context.Background(), []string{""})
-	// bulkIngester := NewBulkIngester(executor)
-	// typedIngester := NewTypedIngester(bulkIngester, "document")
 	typedIngester := &TypedIngester{DocumentType: "document"}
 	indexingWorker := NewIndexingWorkerV8(typedIngester, 1, 500)
-	// indexingWorker := IndexingWorker{}
 
 	mergeConfig := connector.Config{Type: "document", Mode: connector.Self, ExistingAsMaster: true, Groups: []connector.Group{{FieldReplace: []string{"update"}}}}
 	buffer := []UpdateCommand{

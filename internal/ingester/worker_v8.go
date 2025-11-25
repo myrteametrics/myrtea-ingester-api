@@ -86,17 +86,6 @@ func (worker *IndexingWorkerV8) Run() {
 		zap.Int("WorkerID", worker.ID),
 	)
 
-	// Throttle testing only
-	// for {
-	// 	select {
-	// 	case uc := <-worker.Data:
-	// 		// zap.L().Info("Receive UpdateCommand", zap.String("typedIngesterUUID", worker.TypedIngester.UUID.String()), zap.String("workerUUID", worker.UUID.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Any("UpdateCommand", uc))
-	// 		_ = uc
-	// 		worker.metricWorkerQueueGauge.Set(float64(len(worker.Data)))
-	// 		time.Sleep(time.Millisecond * 1000)
-	// 	}
-	// }
-
 	bufferLength := viper.GetInt("WORKER_MAXIMUM_BUFFER_SIZE")
 	buffer := make([]UpdateCommand, 0)
 
@@ -282,7 +271,7 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsFullV2(indices []string, docs
 	var mgetBatches []map[string]GetQuery
 	currentMgetBatch := map[string]GetQuery{}
 
-	for i := 0; i < len(docs); i++ {
+	for i := range len(docs) {
 		if i != 0 && worker.mgetBatchSize != 0 && i%worker.mgetBatchSize == 0 {
 			mgetBatches = append(mgetBatches, currentMgetBatch)
 			currentMgetBatch = map[string]GetQuery{}

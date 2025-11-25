@@ -7,7 +7,7 @@ import (
 	"github.com/go-kit/kit/metrics"
 	"github.com/go-kit/kit/metrics/prometheus"
 	"github.com/google/uuid"
-	config "github.com/myrteametrics/myrtea-ingester-api/v5/internals/configuration"
+	config "github.com/myrteametrics/myrtea-ingester-api/v5/internal/configuration"
 	stdprometheus "github.com/prometheus/client_golang/prometheus"
 	"github.com/spf13/viper"
 	"go.uber.org/zap"
@@ -28,7 +28,7 @@ type TypedIngester struct {
 	DocumentType                  string
 	Data                          chan *IngestRequest
 	Workers                       map[int]IndexingWorker
-	maxWorkers                    int
+	maxWorkers                    uint32
 	metricTypedIngesterQueueGauge metrics.Gauge
 }
 
@@ -50,12 +50,12 @@ func NewTypedIngester(bulkIngester *BulkIngester, documentType string) *TypedIng
 		DocumentType:                  documentType,
 		Data:                          make(chan *IngestRequest, viper.GetInt("TYPEDINGESTER_QUEUE_BUFFER_SIZE")),
 		Workers:                       make(map[int]IndexingWorker),
-		maxWorkers:                    viper.GetInt("INGESTER_MAXIMUM_WORKERS"),
+		maxWorkers:                    viper.GetUint32("INGESTER_MAXIMUM_WORKERS"),
 		metricTypedIngesterQueueGauge: _metricTypedIngesterQueueGauge.With("typedingester", documentType),
 	}
 	_metricTypedIngesterQueueGauge.With("typedingester", documentType).Set(0)
 
-	for i := 0; i < ingester.maxWorkers; i++ {
+	for i := range int(ingester.maxWorkers) {
 		worker, err := NewIndexingWorker(&ingester, i)
 		if err != nil {
 			zap.L().Fatal("Could not create IndexingWorker", zap.Int("workerID", i), zap.Error(err))
@@ -96,14 +96,17 @@ func (ingester *TypedIngester) Run() {
 }
 
 // getWorker returns a workerID based on a UUID hash
-func getWorker(uuid string, maxWorker int) int {
+func getWorker(uuid string, maxWorker uint32) int {
 	hash := hash(uuid)
-	return int(hash % uint32(maxWorker))
+	return int(hash % maxWorker)
 }
 
-// hash hash a string (for potential routing)
+// hash a string (for potential routing)
 func hash(str string) uint32 {
 	h := fnv.New32a()
-	h.Write([]byte(str))
+	_, err := h.Write([]byte(str))
+	if err != nil {
+		return 0
+	}
 	return h.Sum32()
 }
