@@ -128,5 +128,4 @@ func TestDirectBulkChainedUpdate(t *testing.T) {
 
 	indexingWorker.directBulkChainedUpdate(updateCommandGroups)
 	t.Fail()
-
 }

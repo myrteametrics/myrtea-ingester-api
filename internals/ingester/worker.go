@@ -113,11 +113,6 @@ type GetQuery struct {
 	ID           string
 }
 
-func (getQuery *GetQuery) convertToExecutor() models.Document {
-	alias := buildAliasName(getQuery.DocumentType, index.All)
-	return *models.NewDocument(getQuery.ID, alias, "document", nil)
-}
-
 func buildAliasName(documentType string, depth index.Depth) string {
 	access := fmt.Sprintf("%s-%s-%s", viper.GetString("INSTANCE_NAME"), documentType, strings.ToLower(depth.String()))
 	return access

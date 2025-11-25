@@ -20,6 +20,8 @@ import (
 	"go.uber.org/zap"
 )
 
+const nanosPerSecond = 1e9
+
 // IndexingWorkerV8 is the unit of processing which can be started in parallel for elasticsearch ingestion
 type IndexingWorkerV8 struct {
 	UUID                                     uuid.UUID
@@ -103,7 +105,6 @@ func (worker *IndexingWorkerV8) Run() {
 
 	for {
 		select {
-
 		// Send indexing bulk (when buffer is full or on timeout)
 		case <-forceFlush:
 			zap.L().Info("Try on after timeout reached", zap.String("typedIngesterUUID", worker.TypedIngester.UUID.String()),
@@ -173,7 +174,7 @@ func (worker *IndexingWorkerV8) flushEsBuffer(buffer []UpdateCommand) {
 	}
 
 	worker.metricWorkerMessage.With("status", "flushed").Add(float64(len(buffer)))
-	worker.metricWorkerFlushDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
+	worker.metricWorkerFlushDuration.Observe(float64(time.Since(start).Nanoseconds()) / nanosPerSecond)
 }
 
 // bulkChainedUpdate process multiple groups of UpdateCommand
@@ -198,7 +199,7 @@ func (worker *IndexingWorkerV8) bulkChainedUpdate(updateCommandGroups [][]Update
 		zap.Int("WorkerID", worker.ID), zap.String("step", "getindices"))
 	start := time.Now()
 	indices, err := worker.getIndices(docs[0].DocumentType)
-	worker.metricWorkerGetIndicesDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
+	worker.metricWorkerGetIndicesDuration.Observe(float64(time.Since(start).Nanoseconds()) / nanosPerSecond)
 	if err != nil {
 		zap.L().Error("getIndices", zap.Error(err))
 	}
@@ -208,7 +209,7 @@ func (worker *IndexingWorkerV8) bulkChainedUpdate(updateCommandGroups [][]Update
 
 	start = time.Now()
 	refDocs, err := worker.multiGetFindRefDocsFullV2(indices, docs)
-	worker.metricWorkerDirectMultiGetDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
+	worker.metricWorkerDirectMultiGetDuration.Observe(float64(time.Since(start).Nanoseconds()) / nanosPerSecond)
 
 	if err != nil {
 		zap.L().Error("multiGetFindRefDocsFull", zap.Error(err))
@@ -219,7 +220,7 @@ func (worker *IndexingWorkerV8) bulkChainedUpdate(updateCommandGroups [][]Update
 
 	start = time.Now()
 	push, err := worker.applyMerges(updateCommandGroups, refDocs)
-	worker.metricWorkerApplyMergesDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
+	worker.metricWorkerApplyMergesDuration.Observe(float64(time.Since(start).Nanoseconds()) / nanosPerSecond)
 
 	if err != nil {
 		zap.L().Error("applyMerges", zap.Error(err))
@@ -230,7 +231,8 @@ func (worker *IndexingWorkerV8) bulkChainedUpdate(updateCommandGroups [][]Update
 
 	start = time.Now()
 	err = worker.bulkIndex(push)
-	worker.metricWorkerBulkIndexDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
+
+	worker.metricWorkerBulkIndexDuration.Observe(float64(time.Since(start).Nanoseconds()) / nanosPerSecond)
 	if err != nil {
 		zap.L().Error("bulkIndex", zap.Error(err))
 	}
@@ -325,34 +327,34 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsFullV2(indices []string, docs
 }
 
 // reorderBatches FIXME: not really optimised, should not be used, but rewritten
-func (worker *IndexingWorkerV8) reorderBatches(mgetBatch []map[string]GetQuery) []map[string]GetQuery {
-	// here we reorder the batches, so that the first batch is the one with the most found documents (to avoid useless requests)
-	// the first must always have the most but limited by worker.mgetBatchSize
-	if len(mgetBatch) <= 1 {
-		return mgetBatch
-	}
-	for i := 1; i < len(mgetBatch); i++ {
-		// check if batch is full
-		if len(mgetBatch[i]) >= worker.mgetBatchSize {
-			continue
-		}
-
-		// check if we have a next batch, continue else
-		if i+1 >= len(mgetBatch) {
-			continue
-		}
-
-		// move as much as possible from the next batch to the current one (limited by worker.mgetBatchSize)
-		for k, v := range mgetBatch[i+1] {
-			if len(mgetBatch[i]) >= worker.mgetBatchSize {
-				break
-			}
-			mgetBatch[i][k] = v
-			delete(mgetBatch[i+1], k)
-		}
-	}
-	return mgetBatch
-}
+//func (worker *IndexingWorkerV8) reorderBatches(mgetBatch []map[string]GetQuery) []map[string]GetQuery {
+//	// here we reorder the batches, so that the first batch is the one with the most found documents (to avoid useless requests)
+//	// the first must always have the most but limited by worker.mgetBatchSize
+//	if len(mgetBatch) <= 1 {
+//		return mgetBatch
+//	}
+//	for i := 1; i < len(mgetBatch); i++ {
+//		// check if batch is full
+//		if len(mgetBatch[i]) >= worker.mgetBatchSize {
+//			continue
+//		}
+//
+//		// check if we have a next batch, continue else
+//		if i+1 >= len(mgetBatch) {
+//			continue
+//		}
+//
+//		// move as much as possible from the next batch to the current one (limited by worker.mgetBatchSize)
+//		for k, v := range mgetBatch[i+1] {
+//			if len(mgetBatch[i]) >= worker.mgetBatchSize {
+//				break
+//			}
+//			mgetBatch[i][k] = v
+//			delete(mgetBatch[i+1], k)
+//		}
+//	}
+//	return mgetBatch
+//}
 
 type multiGetResponseItem struct {
 	// Fields       map[string]jsoniter.RawMessage `json:"fields,omitempty"`
@@ -545,11 +547,11 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 			buf.WriteByte('\n')
 		}
 	}
-	worker.metricWorkerBulkIndexBuildBufferDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
+	worker.metricWorkerBulkIndexBuildBufferDuration.Observe(float64(time.Since(start).Nanoseconds()) / nanosPerSecond)
 
 	start = time.Now()
 	res, err := esapi.BulkRequest{Body: buf}.Do(ctx, elasticsearch.C())
-	worker.metricWorkerBulkInsertDuration.Observe(float64(time.Since(start).Nanoseconds()) / 1e9)
+	worker.metricWorkerBulkInsertDuration.Observe(float64(time.Since(start).Nanoseconds()) / nanosPerSecond)
 
 	if err != nil {
 		zap.L().Error("bulkRequest", zap.Error(err))
