@@ -225,12 +225,8 @@ func (worker *IndexingWorkerV8) bulkChainedUpdate(updateCommandGroups [][]Update
 		zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
 
 	start = time.Now()
-	push, err := worker.applyMerges(updateCommandGroups, refDocs)
+	push := worker.applyMerges(updateCommandGroups, refDocs)
 	worker.metricWorkerApplyMergesDuration.Observe(float64(time.Since(start).Nanoseconds()) / nanosPerSecond)
-
-	if err != nil {
-		zap.L().Error("applyMerges", zap.Error(err))
-	}
 
 	zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
 		zap.Int("WorkerID", worker.ID), zap.String("step", "bulkIndex"))
@@ -347,12 +343,14 @@ type multiGetResponse struct {
 }
 
 // multiGetFindRefDocsV2 part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false
-func (worker *IndexingWorkerV8) multiGetFindRefDocsV2(index string, queries map[string]GetQuery) (*multiGetResponse, error) {
+func (worker *IndexingWorkerV8) multiGetFindRefDocsV2(index string,
+	queries map[string]GetQuery) (*multiGetResponse, error) {
 	if len(queries) == 0 {
 		return nil, errors.New("docs[] is empty")
 	}
 
-	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("index", index))
+	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+		zap.Int("WorkerID", worker.ID), zap.String("index", index))
 
 	source := make(map[string]any)
 	sourceItems := make([]types.MgetOperation, len(queries))
@@ -374,7 +372,8 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsV2(index string, queries map[
 		zap.L().Warn("json encode source", zap.Error(err))
 	}
 
-	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("index", index), zap.String("status", "done"))
+	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+		zap.Int("WorkerID", worker.ID), zap.String("index", index), zap.String("status", "done"))
 
 	if err != nil || response.Docs == nil || len(response.Docs) == 0 {
 		zap.L().Error("MultiGet (self)", zap.Error(err))
@@ -447,7 +446,8 @@ func (worker *IndexingWorkerV8) perfomMgetRequest(ctx context.Context, r *mget.M
 // }
 
 // applyMerges part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false
-func (worker *IndexingWorkerV8) applyMerges(documents [][]UpdateCommand, refDocs map[string]models.Document) ([]models.Document, error) {
+func (worker *IndexingWorkerV8) applyMerges(documents [][]UpdateCommand,
+	refDocs map[string]models.Document) []models.Document {
 	var push = make([]models.Document, 0)
 
 	for _, commands := range documents {
@@ -473,7 +473,7 @@ func (worker *IndexingWorkerV8) applyMerges(documents [][]UpdateCommand, refDocs
 		push = append(push, doc)
 	}
 
-	return push, nil
+	return push
 }
 
 // buildBulkIndexItem all modes: ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false/true
