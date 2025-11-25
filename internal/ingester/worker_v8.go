@@ -271,7 +271,7 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsFullV2(indices []string, docs
 	var mgetBatches []map[string]GetQuery
 	currentMgetBatch := map[string]GetQuery{}
 
-	for i := range len(docs) {
+	for i := range docs {
 		if i != 0 && worker.mgetBatchSize != 0 && i%worker.mgetBatchSize == 0 {
 			mgetBatches = append(mgetBatches, currentMgetBatch)
 			currentMgetBatch = map[string]GetQuery{}
@@ -308,7 +308,6 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsFullV2(indices []string, docs
 
 			// Should we?
 			// mgetBatches = worker.reorderBatches(mgetBatches)
-
 		}
 	}
 
@@ -316,34 +315,34 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsFullV2(indices []string, docs
 }
 
 // reorderBatches FIXME: not really optimised, should not be used, but rewritten
-//func (worker *IndexingWorkerV8) reorderBatches(mgetBatch []map[string]GetQuery) []map[string]GetQuery {
-//	// here we reorder the batches, so that the first batch is the one with the most found documents (to avoid useless requests)
-//	// the first must always have the most but limited by worker.mgetBatchSize
-//	if len(mgetBatch) <= 1 {
-//		return mgetBatch
-//	}
-//	for i := 1; i < len(mgetBatch); i++ {
-//		// check if batch is full
-//		if len(mgetBatch[i]) >= worker.mgetBatchSize {
-//			continue
-//		}
+// func (worker *IndexingWorkerV8) reorderBatches(mgetBatch []map[string]GetQuery) []map[string]GetQuery {
+// 	// here we reorder the batches, so that the first batch is the one with the most found documents (to avoid useless requests)
+// 	// the first must always have the most but limited by worker.mgetBatchSize
+// 	if len(mgetBatch) <= 1 {
+// 		return mgetBatch
+// 	}
+// 	for i := 1; i < len(mgetBatch); i++ {
+// 		// check if batch is full
+// 		if len(mgetBatch[i]) >= worker.mgetBatchSize {
+// 			continue
+// 		}
 //
-//		// check if we have a next batch, continue else
-//		if i+1 >= len(mgetBatch) {
-//			continue
-//		}
+// 		// check if we have a next batch, continue else
+// 		if i+1 >= len(mgetBatch) {
+// 			continue
+// 		}
 //
-//		// move as much as possible from the next batch to the current one (limited by worker.mgetBatchSize)
-//		for k, v := range mgetBatch[i+1] {
-//			if len(mgetBatch[i]) >= worker.mgetBatchSize {
-//				break
-//			}
-//			mgetBatch[i][k] = v
-//			delete(mgetBatch[i+1], k)
-//		}
-//	}
-//	return mgetBatch
-//}
+// 		// move as much as possible from the next batch to the current one (limited by worker.mgetBatchSize)
+// 		for k, v := range mgetBatch[i+1] {
+// 			if len(mgetBatch[i]) >= worker.mgetBatchSize {
+// 				break
+// 			}
+// 			mgetBatch[i][k] = v
+// 			delete(mgetBatch[i+1], k)
+// 		}
+// 	}
+// 	return mgetBatch
+// }
 
 type multiGetResponseItem struct {
 	// Fields       map[string]jsoniter.RawMessage `json:"fields,omitempty"`
@@ -384,7 +383,7 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsV2(index string, queries map[
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 
-	response, err := worker.perfomMgetRequest(elasticsearch.C().Mget().Index(index).Request(req), ctx)
+	response, err := worker.perfomMgetRequest(ctx, elasticsearch.C().Mget().Index(index).Request(req))
 	if err != nil {
 		zap.L().Warn("json encode source", zap.Error(err))
 	}
@@ -399,7 +398,7 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsV2(index string, queries map[
 }
 
 // performMgetRequest part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=true/false
-func (worker *IndexingWorkerV8) perfomMgetRequest(r *mget.Mget, ctx context.Context) (*multiGetResponse, error) {
+func (worker *IndexingWorkerV8) perfomMgetRequest(ctx context.Context, r *mget.Mget) (*multiGetResponse, error) {
 	response := &multiGetResponse{}
 
 	res, err := r.Perform(ctx)
@@ -583,7 +582,7 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 		errorsMap := make(map[string]int64)
 		for _, item := range r.Items {
 			if _, found := errorsMap[item["index"].Error.Type]; found {
-				errorsMap[item["index"].Error.Type] += 1
+				errorsMap[item["index"].Error.Type]++
 			} else {
 				errorsMap[item["index"].Error.Type] = 1
 			}

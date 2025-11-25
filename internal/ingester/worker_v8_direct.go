@@ -95,7 +95,7 @@ func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]Updat
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
 	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("status", "done"))
-	response, err := worker.perfomMgetRequest(elasticsearch.C().Mget().Request(req), ctx)
+	response, err := worker.perfomMgetRequest(ctx, elasticsearch.C().Mget().Request(req))
 	if err != nil || response.Docs == nil || len(response.Docs) == 0 {
 		zap.L().Error("perfomMgetRequest (self)", zap.Error(err))
 	}

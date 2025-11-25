@@ -23,9 +23,9 @@ func TestDirectBulkChainedUpdate2(t *testing.T) {
 	typedIngester := &TypedIngester{DocumentType: "document"}
 	indexingWorker := NewIndexingWorkerV8(typedIngester, 1, 500)
 
-	esapi.IndicesDeleteRequest{AllowNoIndices: esapi.BoolPtr(true), Index: []string{"myindex"}}.Do(context.Background(), elasticsearch.C())
-	esapi.IndicesDeleteRequest{AllowNoIndices: esapi.BoolPtr(true), Index: []string{"myotherindex"}}.Do(context.Background(), elasticsearch.C())
-	esapi.IndicesDeleteRequest{AllowNoIndices: esapi.BoolPtr(true), Index: []string{"myotherotherindex"}}.Do(context.Background(), elasticsearch.C())
+	_, _ = esapi.IndicesDeleteRequest{AllowNoIndices: esapi.BoolPtr(true), Index: []string{"myindex"}}.Do(context.Background(), elasticsearch.C())
+	_, _ = esapi.IndicesDeleteRequest{AllowNoIndices: esapi.BoolPtr(true), Index: []string{"myotherindex"}}.Do(context.Background(), elasticsearch.C())
+	_, _ = esapi.IndicesDeleteRequest{AllowNoIndices: esapi.BoolPtr(true), Index: []string{"myotherotherindex"}}.Do(context.Background(), elasticsearch.C())
 
 	docs := []models.Document{
 		{IndexType: "document", Index: "myindex", ID: "1", Source: map[string]any{"a": "a", "b": "b"}},
