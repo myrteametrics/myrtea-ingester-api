@@ -1,6 +1,6 @@
 module github.com/myrteametrics/myrtea-ingester-api/v5
 
-go 1.25.1
+go 1.25
 
 require (
 	github.com/elastic/go-elasticsearch/v8 v8.15.0
