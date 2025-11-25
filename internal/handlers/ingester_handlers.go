@@ -2,10 +2,11 @@ package handlers
 
 import (
 	"errors"
-	jsoniter "github.com/json-iterator/go"
 	"net/http"
 
-	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/ingester"
+	jsoniter "github.com/json-iterator/go"
+
+	"github.com/myrteametrics/myrtea-ingester-api/v5/internal/ingester"
 
 	"go.uber.org/zap"
 )
@@ -54,11 +55,12 @@ func (handler *IngesterHandler) ReceiveData(w http.ResponseWriter, r *http.Reque
 
 	err = handler.bulkIngester.Ingest(bir)
 	if err != nil {
-		if errors.Is(err, ingester.ErrChannelOverload) {
+		switch {
+		case errors.Is(err, ingester.ErrChannelOverload):
 			w.WriteHeader(http.StatusTooManyRequests)
-		} else if err.Error() == "elasticsearch healthcheck red" { // Replace with custom error
+		case err.Error() == "elasticsearch healthcheck red":
 			w.WriteHeader(http.StatusInternalServerError)
-		} else if errors.Is(err, ingester.ErrDocumentTypeEmpty) {
+		case errors.Is(err, ingester.ErrDocumentTypeEmpty):
 			w.WriteHeader(http.StatusBadRequest)
 		}
 		return

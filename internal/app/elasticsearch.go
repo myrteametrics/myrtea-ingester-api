@@ -15,10 +15,13 @@ func InitElasticsearch() {
 	case 7:
 		fallthrough
 	case 8:
-		es.ReplaceGlobals(elasticsearch.Config{
+		err := es.ReplaceGlobals(elasticsearch.Config{
 			Addresses:     urls,
 			EnableMetrics: true,
 		})
+		if err != nil {
+			zap.L().Fatal("Cannot connect to Elasticsearch", zap.Error(err))
+		}
 	default:
 		zap.L().Fatal("Unsupported Elasticsearch version", zap.Int("version", version))
 	}

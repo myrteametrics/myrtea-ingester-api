@@ -3,16 +3,17 @@ package main
 import (
 	"context"
 	"errors"
-	"github.com/myrteametrics/myrtea-sdk/v5/connector"
 	"net/http"
 	"os"
 	"os/signal"
 	"syscall"
 	"time"
 
-	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/app"
-	config "github.com/myrteametrics/myrtea-ingester-api/v5/internals/configuration"
-	"github.com/myrteametrics/myrtea-ingester-api/v5/internals/routes"
+	"github.com/myrteametrics/myrtea-sdk/v5/connector"
+
+	"github.com/myrteametrics/myrtea-ingester-api/v5/internal/app"
+	config "github.com/myrteametrics/myrtea-ingester-api/v5/internal/configuration"
+	"github.com/myrteametrics/myrtea-ingester-api/v5/internal/routes"
 	"github.com/myrteametrics/myrtea-sdk/v5/helpers"
 	"github.com/myrteametrics/myrtea-sdk/v5/router"
 	"github.com/myrteametrics/myrtea-sdk/v5/server"
@@ -39,7 +40,6 @@ var (
 // @host localhost:9001
 // @BasePath /api/v1
 func main() {
-
 	hostname, _ := os.Hostname()
 	config.InitMetricLabels(hostname)
 

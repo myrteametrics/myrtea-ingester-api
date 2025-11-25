@@ -11,13 +11,13 @@ import (
 // @Tags System
 // @Success 200  "Status OK"
 // @Router /isalive [get]
-func IsAlive(w http.ResponseWriter, r *http.Request) {
-	io.WriteString(w, `{"alive": true}`)
+func IsAlive(w http.ResponseWriter, _ *http.Request) {
+	_, _ = io.WriteString(w, `{"alive": true}`)
 }
 
 // NotImplemented returns a basic message "Not Implemented" when called, and should be use a filler for future handler
-func NotImplemented(w http.ResponseWriter, r *http.Request) {
-	io.WriteString(w, `{"message":"Not Implemented"}`)
+func NotImplemented(w http.ResponseWriter, _ *http.Request) {
+	_, _ = io.WriteString(w, `{"message":"Not Implemented"}`)
 }
 
 // FuncLogin godoc (only for swagger doc)
