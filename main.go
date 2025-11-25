@@ -40,7 +40,6 @@ var (
 // @host localhost:9001
 // @BasePath /api/v1
 func main() {
-
 	hostname, _ := os.Hostname()
 	config.InitMetricLabels(hostname)
 

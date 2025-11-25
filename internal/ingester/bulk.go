@@ -66,8 +66,15 @@ func (ingester *BulkIngester) Ingest(bir BulkIngestRequest) error {
 	}
 
 	for i, doc := range bir.Docs {
-		ir := IngestRequest{BulkUUID: bir.UUID, UUID: strconv.Itoa(i), DocumentType: bir.DocumentType, MergeConfig: mergeConfig, Doc: doc}
-		zap.L().Debug("Send IngestRequest", zap.String("BulkUUID", bir.UUID), zap.Int("RequestUUID", i), zap.Any("IngestRequest", ir), zap.Any("len(chan)", len(typedIngester.Data)))
+		ir := IngestRequest{
+			BulkUUID:     bir.UUID,
+			UUID:         strconv.Itoa(i),
+			DocumentType: bir.DocumentType,
+			MergeConfig:  mergeConfig,
+			Doc:          doc,
+		}
+		zap.L().Debug("Send IngestRequest", zap.String("BulkUUID", bir.UUID), zap.Int("RequestUUID", i),
+			zap.Any("IngestRequest", ir), zap.Any("len(chan)", len(typedIngester.Data)))
 		typedIngester.Data <- &ir
 	}
 

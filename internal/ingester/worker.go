@@ -82,7 +82,8 @@ var (
 )
 
 func ApplyMergeLight(doc models.Document, command UpdateCommand) models.Document {
-	zap.L().Debug("ApplyMerge", zap.String("mergeMode", command.MergeConfig.Mode.String()), zap.Any("doc", doc), zap.Any("command", command))
+	zap.L().Debug("ApplyMerge", zap.String("mergeMode", command.MergeConfig.Mode.String()),
+		zap.Any("doc", doc), zap.Any("command", command))
 
 	switch command.MergeConfig.Mode {
 	case connector.Self:
@@ -91,60 +92,20 @@ func ApplyMergeLight(doc models.Document, command UpdateCommand) models.Document
 		output := command.MergeConfig.Apply(&command.NewDoc, &doc)
 		zap.L().Debug("ApplyMergeResult", zap.Any("output", output))
 		return *output
+	case connector.EnrichTo:
+		fallthrough
+	case connector.EnrichFrom:
+		fallthrough
 	default:
 		zap.L().Warn("mergeconfig mode not supported", zap.String("mode", command.MergeConfig.Mode.String()))
 	}
 	return models.Document{}
 }
 
-// // ApplyMerge execute a merge based on a specific UpdateCommand
-// func ApplyMerge(doc models.Document, command UpdateCommand, secondary []models.Document) models.Document {
-// 	// Important : "doc" is always the output document
-// 	zap.L().Debug("ApplyMerge", zap.String("mergeMode", command.MergeConfig.Mode.String()), zap.Any("doc", doc), zap.Any("command", command), zap.Any("secondary", secondary))
-
-// 	switch command.MergeConfig.Mode {
-// 	case connector.Self:
-// 		// COMMAND.NEWDOC enriched with DOC (pointer swap !) with config COMMAND.MERGECONFIG
-// 		// The new pushed document become the new "reference" (and is enriched by the data of an existing one)
-// 		output := command.MergeConfig.Apply(command.NewDoc, doc)
-// 		zap.L().Debug("ApplyMergeResult", zap.Any("output", output))
-// 		return output
-
-// 	case connector.EnrichFrom:
-// 		// COMMAND.NEWDOC enriched by SECONDARY[KEY] with config COMMAND.MERGECONFIG
-// 		for _, sec := range secondary {
-// 			if sec == nil {
-// 				continue
-// 			}
-// 			key := command.MergeConfig.LinkKey
-// 			source := command.NewDoc.Source.(map[string]interface{})
-// 			if sec.IndexType == command.MergeConfig.Type && sec.ID == source[key] {
-// 				command.MergeConfig.Apply(doc, sec)
-// 				break // TODO: what about multiple external document enriching a single one ?
-// 			}
-// 		}
-// 		zap.L().Debug("ApplyMergeResult", zap.Any("doc", doc))
-// 		return doc
-
-// 	case connector.EnrichTo:
-// 		// DOC enriched WITH COMMAND.NEWDOC (NO pointer swap !) with config COMMAND.MERGECONFIG
-// 		// The old existing document stay the reference (and is enriched with the data of a new one)
-// 		command.MergeConfig.Apply(doc, command.NewDoc)
-// 		zap.L().Debug("ApplyMergeResult", zap.Any("doc", doc))
-// 		return doc
-// 	}
-// 	return nil
-// }
-
 // GetQuery ...
 type GetQuery struct {
 	DocumentType string
 	ID           string
-}
-
-func (getQuery *GetQuery) convertToExecutor() models.Document {
-	alias := buildAliasName(getQuery.DocumentType, index.All)
-	return *models.NewDocument(getQuery.ID, alias, "document", nil)
 }
 
 func buildAliasName(documentType string, depth index.Depth) string {

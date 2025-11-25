@@ -23,12 +23,12 @@ import (
 // TypedIngester is a component which process IngestRequest
 // It generates UpdateCommand which are processed by the attached IndexingWorker's
 type TypedIngester struct {
-	Uuid                          uuid.UUID
+	UUID                          uuid.UUID
 	bulkIngester                  *BulkIngester
 	DocumentType                  string
 	Data                          chan *IngestRequest
 	Workers                       map[int]IndexingWorker
-	maxWorkers                    int
+	maxWorkers                    uint32
 	metricTypedIngesterQueueGauge metrics.Gauge
 }
 
@@ -43,22 +43,21 @@ var (
 
 // NewTypedIngester returns a pointer to a new TypedIngester instance
 func NewTypedIngester(bulkIngester *BulkIngester, documentType string) *TypedIngester {
-
 	ingester := TypedIngester{
-		Uuid:                          uuid.New(),
+		UUID:                          uuid.New(),
 		bulkIngester:                  bulkIngester,
 		DocumentType:                  documentType,
 		Data:                          make(chan *IngestRequest, viper.GetInt("TYPEDINGESTER_QUEUE_BUFFER_SIZE")),
 		Workers:                       make(map[int]IndexingWorker),
-		maxWorkers:                    viper.GetInt("INGESTER_MAXIMUM_WORKERS"),
+		maxWorkers:                    viper.GetUint32("INGESTER_MAXIMUM_WORKERS"),
 		metricTypedIngesterQueueGauge: _metricTypedIngesterQueueGauge.With("typedingester", documentType),
 	}
 	_metricTypedIngesterQueueGauge.With("typedingester", documentType).Set(0)
 
-	for i := 0; i < ingester.maxWorkers; i++ {
+	for i := range int(ingester.maxWorkers) {
 		worker, err := NewIndexingWorker(&ingester, i)
 		if err != nil {
-
+			zap.L().Fatal("Could not create IndexingWorker", zap.Int("workerID", i), zap.Error(err))
 		}
 		ingester.Workers[i] = worker
 		go worker.Run()
@@ -82,12 +81,15 @@ func (ingester *TypedIngester) Run() {
 	zap.L().Info("Starting TypedIngester", zap.String("documentType", ingester.DocumentType))
 
 	for ir := range ingester.Data {
-		zap.L().Debug("Receive IngestRequest", zap.String("IngesterType", ingester.DocumentType), zap.Any("IngestRequest", ir))
+		zap.L().Debug("Receive IngestRequest", zap.String("IngesterType", ingester.DocumentType),
+			zap.Any("IngestRequest", ir))
 
 		workerID := getWorker(ir.Doc.ID, ingester.maxWorkers)
 		worker := ingester.Workers[workerID]
 		updateCommand := NewUpdateCommand(ir.Doc.Index, ir.Doc.ID, ir.DocumentType, ir.Doc, ir.MergeConfig)
-		zap.L().Debug("Send UpdateCommand", zap.String("IngesterType", ingester.DocumentType), zap.Int("WorkerID", workerID), zap.Any("updateCommand", updateCommand), zap.Any("len(chan)", len(ingester.Workers[workerID].GetData())))
+		zap.L().Debug("Send UpdateCommand", zap.String("IngesterType", ingester.DocumentType),
+			zap.Int("WorkerID", workerID), zap.Any("updateCommand", updateCommand),
+			zap.Any("len(chan)", len(ingester.Workers[workerID].GetData())))
 
 		worker.GetData() <- updateCommand
 
@@ -96,14 +98,17 @@ func (ingester *TypedIngester) Run() {
 }
 
 // getWorker returns a workerID based on a UUID hash
-func getWorker(uuid string, maxWorker int) int {
+func getWorker(uuid string, maxWorker uint32) int {
 	hash := hash(uuid)
-	return int(hash % uint32(maxWorker))
+	return int(hash % maxWorker)
 }
 
-// hash hash a string (for potential routing)
+// hash a string (for potential routing)
 func hash(str string) uint32 {
 	h := fnv.New32a()
-	h.Write([]byte(str))
+	_, err := h.Write([]byte(str))
+	if err != nil {
+		return 0
+	}
 	return h.Sum32()
 }

@@ -15,7 +15,8 @@ type UpdateCommand struct {
 }
 
 // NewUpdateCommand returns a new UpdateCommand
-func NewUpdateCommand(index string, documentID string, documentType string, newDoc models.Document, mergeConfig connector.Config) UpdateCommand {
+func NewUpdateCommand(index string, documentID string, documentType string, newDoc models.Document,
+	mergeConfig connector.Config) UpdateCommand {
 	uc := UpdateCommand{
 		Index:        index,
 		DocumentID:   documentID,
