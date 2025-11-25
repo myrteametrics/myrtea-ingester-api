@@ -254,7 +254,6 @@ func (worker *IndexingWorkerV8) getIndices(documentType string) ([]string, error
 	if err != nil {
 		zap.L().Error("", zap.Error(err))
 		return make([]string, 0), errors.New("alias not found")
-
 	}
 	defer res.Body.Close()
 	if res.IsError() {
@@ -546,11 +545,12 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 		return err
 	}
 
-	// zap.L().Info("response", zap.Any("r", r))
 	if len(r.Failed()) > 0 {
 		zap.L().Warn("Error during bulkIndex", zap.String("typedIngesterUUID", worker.TypedIngester.UUID.String()),
-			zap.String("workerUUID", worker.UUID.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType),
-			zap.Int("WorkerID", worker.ID), zap.Int("Docs", len(docs)), zap.Int("Errors", len(r.Failed())))
+			zap.String("workerUUID", worker.UUID.String()),
+			zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+			zap.Int("WorkerID", worker.ID), zap.Int("Docs", len(docs)),
+			zap.Int("Errors", len(r.Failed())))
 		sampleItemFound := false
 		for _, item := range r.Items {
 			if item["index"].Error.Type == "" {
