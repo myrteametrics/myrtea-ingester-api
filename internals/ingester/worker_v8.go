@@ -88,7 +88,7 @@ func (worker *IndexingWorkerV8) Run() {
 	// for {
 	// 	select {
 	// 	case uc := <-worker.Data:
-	// 		// zap.L().Info("Receive UpdateCommand", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Any("UpdateCommand", uc))
+	// 		// zap.L().Info("Receive UpdateCommand", zap.String("typedIngesterUUID", worker.TypedIngester.UUID.String()), zap.String("workerUUID", worker.UUID.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Any("UpdateCommand", uc))
 	// 		_ = uc
 	// 		worker.metricWorkerQueueGauge.Set(float64(len(worker.Data)))
 	// 		time.Sleep(time.Millisecond * 1000)
@@ -106,12 +106,12 @@ func (worker *IndexingWorkerV8) Run() {
 
 		// Send indexing bulk (when buffer is full or on timeout)
 		case <-forceFlush:
-			zap.L().Info("Try on after timeout reached", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()),
+			zap.L().Info("Try on after timeout reached", zap.String("typedIngesterUUID", worker.TypedIngester.UUID.String()),
 				zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType),
 				zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("workerLen", len(worker.Data)),
 				zap.Int("Timeout", forceFlushTimeout))
 			if len(buffer) > 0 {
-				zap.L().Info("Flushing on timeout reached", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()),
+				zap.L().Info("Flushing on timeout reached", zap.String("typedIngesterUUID", worker.TypedIngester.UUID.String()),
 					zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType),
 					zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("workerLen", len(worker.Data)),
 					zap.Int("Timeout", forceFlushTimeout))
@@ -122,12 +122,12 @@ func (worker *IndexingWorkerV8) Run() {
 
 		// Build indexing bulk
 		case uc := <-worker.Data:
-			zap.L().Debug("Receive UpdateCommand", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()),
+			zap.L().Debug("Receive UpdateCommand", zap.String("typedIngesterUUID", worker.TypedIngester.UUID.String()),
 				zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType),
 				zap.Int("WorkerID", worker.ID), zap.Any("UpdateCommand", uc))
 			buffer = append(buffer, uc)
 			if len(buffer) >= bufferLength {
-				zap.L().Info("Try flushing on full buffer", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()),
+				zap.L().Info("Try flushing on full buffer", zap.String("typedIngesterUUID", worker.TypedIngester.UUID.String()),
 					zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType),
 					zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("workerLen", len(worker.Data)))
 				worker.flushEsBuffer(buffer)
@@ -188,7 +188,7 @@ func (worker *IndexingWorkerV8) bulkChainedUpdate(updateCommandGroups [][]Update
 		docs = append(docs, GetQuery{DocumentType: commands[0].DocumentType, ID: commands[0].DocumentID})
 	}
 	if len(docs) == 0 {
-		zap.L().Warn("empty docs update", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()),
+		zap.L().Warn("empty docs update", zap.String("typedIngesterUUID", worker.TypedIngester.UUID.String()),
 			zap.String("workerUUID", worker.Uuid.String()),
 			zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID))
 		return
@@ -571,7 +571,7 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 
 	// zap.L().Info("response", zap.Any("r", r))
 	if len(r.Failed()) > 0 {
-		zap.L().Warn("Error during bulkIndex", zap.String("typedIngesterUUID", worker.TypedIngester.Uuid.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Docs", len(docs)), zap.Int("Errors", len(r.Failed())))
+		zap.L().Warn("Error during bulkIndex", zap.String("typedIngesterUUID", worker.TypedIngester.UUID.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Docs", len(docs)), zap.Int("Errors", len(r.Failed())))
 		sampleItemFound := false
 		for _, item := range r.Items {
 			if item["index"].Error.Type == "" {

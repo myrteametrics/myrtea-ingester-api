@@ -23,7 +23,7 @@ import (
 // TypedIngester is a component which process IngestRequest
 // It generates UpdateCommand which are processed by the attached IndexingWorker's
 type TypedIngester struct {
-	Uuid                          uuid.UUID
+	UUID                          uuid.UUID
 	bulkIngester                  *BulkIngester
 	DocumentType                  string
 	Data                          chan *IngestRequest
@@ -45,7 +45,7 @@ var (
 func NewTypedIngester(bulkIngester *BulkIngester, documentType string) *TypedIngester {
 
 	ingester := TypedIngester{
-		Uuid:                          uuid.New(),
+		UUID:                          uuid.New(),
 		bulkIngester:                  bulkIngester,
 		DocumentType:                  documentType,
 		Data:                          make(chan *IngestRequest, viper.GetInt("TYPEDINGESTER_QUEUE_BUFFER_SIZE")),
@@ -78,7 +78,6 @@ func NewTypedIngester(bulkIngester *BulkIngester, documentType string) *TypedIng
 // In case of Mode == ENRICH_TO (Which might be the same at last ?)
 // * A dedicated "relation cache" is queried to find all the object which must be updated
 // * One or multiple update command are sent to the dedicated indexer
-//
 func (ingester *TypedIngester) Run() {
 	zap.L().Info("Starting TypedIngester", zap.String("documentType", ingester.DocumentType))
 
