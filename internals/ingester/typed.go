@@ -58,7 +58,7 @@ func NewTypedIngester(bulkIngester *BulkIngester, documentType string) *TypedIng
 	for i := 0; i < ingester.maxWorkers; i++ {
 		worker, err := NewIndexingWorker(&ingester, i)
 		if err != nil {
-
+			zap.L().Fatal("Could not create IndexingWorker", zap.Int("workerID", i), zap.Error(err))
 		}
 		ingester.Workers[i] = worker
 		go worker.Run()

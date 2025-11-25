@@ -31,9 +31,9 @@ func TestDirectBulkChainedUpdate2(t *testing.T) {
 	esapi.IndicesDeleteRequest{AllowNoIndices: esapi.BoolPtr(true), Index: []string{"myotherotherindex"}}.Do(context.Background(), elasticsearch.C())
 
 	docs := []models.Document{
-		{IndexType: "document", Index: "myindex", ID: "1", Source: map[string]interface{}{"a": "a", "b": "b"}},
-		{IndexType: "document", Index: "myindex", ID: "2", Source: map[string]interface{}{"a": "a", "b": "b"}},
-		{IndexType: "document", Index: "myotherindex", ID: "4", Source: map[string]interface{}{"a": "a", "b": "b"}},
+		{IndexType: "document", Index: "myindex", ID: "1", Source: map[string]any{"a": "a", "b": "b"}},
+		{IndexType: "document", Index: "myindex", ID: "2", Source: map[string]any{"a": "a", "b": "b"}},
+		{IndexType: "document", Index: "myotherindex", ID: "4", Source: map[string]any{"a": "a", "b": "b"}},
 	}
 	indexingWorker.bulkIndex(docs)
 	t.Fail()
@@ -57,57 +57,57 @@ func TestDirectBulkChainedUpdate(t *testing.T) {
 	buffer := []UpdateCommand{
 		{
 			Index: "myindex", DocumentID: "1", DocumentType: "document", MergeConfig: mergeConfig,
-			NewDoc: models.Document{Index: "myindex", ID: "1", IndexType: "document", Source: map[string]interface{}{"update": "data"}},
+			NewDoc: models.Document{Index: "myindex", ID: "1", IndexType: "document", Source: map[string]any{"update": "data"}},
 		},
 		{
 			Index: "myindex", DocumentID: "1", DocumentType: "document", MergeConfig: mergeConfig,
-			NewDoc: models.Document{Index: "myindex", ID: "1", IndexType: "document", Source: map[string]interface{}{"update": "data"}},
+			NewDoc: models.Document{Index: "myindex", ID: "1", IndexType: "document", Source: map[string]any{"update": "data"}},
 		},
 		{
 			Index: "myindex", DocumentID: "1", DocumentType: "document", MergeConfig: mergeConfig,
-			NewDoc: models.Document{Index: "myindex", ID: "1", IndexType: "document", Source: map[string]interface{}{"update": "data"}},
+			NewDoc: models.Document{Index: "myindex", ID: "1", IndexType: "document", Source: map[string]any{"update": "data"}},
 		},
 		{
 			Index: "myindex", DocumentID: "2", DocumentType: "document", MergeConfig: mergeConfig,
-			NewDoc: models.Document{Index: "myindex", ID: "2", IndexType: "document", Source: map[string]interface{}{"update": "data"}},
+			NewDoc: models.Document{Index: "myindex", ID: "2", IndexType: "document", Source: map[string]any{"update": "data"}},
 		},
 		{
 			Index: "myindex", DocumentID: "2", DocumentType: "document", MergeConfig: mergeConfig,
-			NewDoc: models.Document{Index: "myindex", ID: "2", IndexType: "document", Source: map[string]interface{}{"update": "data"}},
+			NewDoc: models.Document{Index: "myindex", ID: "2", IndexType: "document", Source: map[string]any{"update": "data"}},
 		},
 		{
 			Index: "myindex", DocumentID: "2", DocumentType: "document", MergeConfig: mergeConfig,
-			NewDoc: models.Document{Index: "myindex", ID: "2", IndexType: "document", Source: map[string]interface{}{"update": "data"}},
+			NewDoc: models.Document{Index: "myindex", ID: "2", IndexType: "document", Source: map[string]any{"update": "data"}},
 		},
 
 		{
 			Index: "myotherindex", DocumentID: "3", DocumentType: "document", MergeConfig: mergeConfig,
-			NewDoc: models.Document{Index: "myotherindex", ID: "3", IndexType: "document", Source: map[string]interface{}{"update": "data"}},
+			NewDoc: models.Document{Index: "myotherindex", ID: "3", IndexType: "document", Source: map[string]any{"update": "data"}},
 		},
 		{
 			Index: "myotherindex", DocumentID: "3", DocumentType: "document", MergeConfig: mergeConfig,
-			NewDoc: models.Document{Index: "myotherindex", ID: "3", IndexType: "document", Source: map[string]interface{}{"update": "data"}},
+			NewDoc: models.Document{Index: "myotherindex", ID: "3", IndexType: "document", Source: map[string]any{"update": "data"}},
 		},
 		{
 			Index: "myotherindex", DocumentID: "3", DocumentType: "document", MergeConfig: mergeConfig,
-			NewDoc: models.Document{Index: "myotherindex", ID: "3", IndexType: "document", Source: map[string]interface{}{"update": "data"}},
+			NewDoc: models.Document{Index: "myotherindex", ID: "3", IndexType: "document", Source: map[string]any{"update": "data"}},
 		},
 		{
 			Index: "myotherindex", DocumentID: "4", DocumentType: "document", MergeConfig: mergeConfig,
-			NewDoc: models.Document{Index: "myotherindex", ID: "4", IndexType: "document", Source: map[string]interface{}{"update": "data"}},
+			NewDoc: models.Document{Index: "myotherindex", ID: "4", IndexType: "document", Source: map[string]any{"update": "data"}},
 		},
 		{
 			Index: "myotherindex", DocumentID: "4", DocumentType: "document", MergeConfig: mergeConfig,
-			NewDoc: models.Document{Index: "myotherindex", ID: "4", IndexType: "document", Source: map[string]interface{}{"update": "data"}},
+			NewDoc: models.Document{Index: "myotherindex", ID: "4", IndexType: "document", Source: map[string]any{"update": "data"}},
 		},
 		{
 			Index: "myotherindex", DocumentID: "4", DocumentType: "document", MergeConfig: mergeConfig,
-			NewDoc: models.Document{Index: "myotherindex", ID: "4", IndexType: "document", Source: map[string]interface{}{"update": "data"}},
+			NewDoc: models.Document{Index: "myotherindex", ID: "4", IndexType: "document", Source: map[string]any{"update": "data"}},
 		},
 
 		{
 			Index: "myotherotherindex", DocumentID: "5", DocumentType: "document", MergeConfig: mergeConfig,
-			NewDoc: models.Document{Index: "myotherotherindex", ID: "5", IndexType: "document", Source: map[string]interface{}{"update": "data"}},
+			NewDoc: models.Document{Index: "myotherotherindex", ID: "5", IndexType: "document", Source: map[string]any{"update": "data"}},
 		},
 	}
 

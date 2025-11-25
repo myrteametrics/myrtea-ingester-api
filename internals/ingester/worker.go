@@ -127,7 +127,7 @@ func ApplyMergeLight(doc models.Document, command UpdateCommand) models.Document
 // 				continue
 // 			}
 // 			key := command.MergeConfig.LinkKey
-// 			source := command.NewDoc.Source.(map[string]interface{})
+// 			source := command.NewDoc.Source.(map[string]any)
 // 			if sec.IndexType == command.MergeConfig.Type && sec.ID == source[key] {
 // 				command.MergeConfig.Apply(doc, sec)
 // 				break // TODO: what about multiple external document enriching a single one ?

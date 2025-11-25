@@ -22,7 +22,7 @@ import (
 
 // IndexingWorkerV8 is the unit of processing which can be started in parallel for elasticsearch ingestion
 type IndexingWorkerV8 struct {
-	Uuid                                     uuid.UUID
+	UUID                                     uuid.UUID
 	TypedIngester                            *TypedIngester
 	ID                                       int
 	Data                                     chan UpdateCommand
@@ -48,7 +48,7 @@ func NewIndexingWorkerV8(typedIngester *TypedIngester, id, mgetBatchSize int) *I
 	}
 
 	worker := &IndexingWorkerV8{
-		Uuid:                                     uuid.New(),
+		UUID:                                     uuid.New(),
 		TypedIngester:                            typedIngester,
 		ID:                                       id,
 		mgetBatchSize:                            mgetBatchSize,
@@ -107,12 +107,12 @@ func (worker *IndexingWorkerV8) Run() {
 		// Send indexing bulk (when buffer is full or on timeout)
 		case <-forceFlush:
 			zap.L().Info("Try on after timeout reached", zap.String("typedIngesterUUID", worker.TypedIngester.UUID.String()),
-				zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+				zap.String("workerUUID", worker.UUID.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType),
 				zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("workerLen", len(worker.Data)),
 				zap.Int("Timeout", forceFlushTimeout))
 			if len(buffer) > 0 {
 				zap.L().Info("Flushing on timeout reached", zap.String("typedIngesterUUID", worker.TypedIngester.UUID.String()),
-					zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+					zap.String("workerUUID", worker.UUID.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType),
 					zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("workerLen", len(worker.Data)),
 					zap.Int("Timeout", forceFlushTimeout))
 				worker.flushEsBuffer(buffer)
@@ -123,12 +123,12 @@ func (worker *IndexingWorkerV8) Run() {
 		// Build indexing bulk
 		case uc := <-worker.Data:
 			zap.L().Debug("Receive UpdateCommand", zap.String("typedIngesterUUID", worker.TypedIngester.UUID.String()),
-				zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+				zap.String("workerUUID", worker.UUID.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType),
 				zap.Int("WorkerID", worker.ID), zap.Any("UpdateCommand", uc))
 			buffer = append(buffer, uc)
 			if len(buffer) >= bufferLength {
 				zap.L().Info("Try flushing on full buffer", zap.String("typedIngesterUUID", worker.TypedIngester.UUID.String()),
-					zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+					zap.String("workerUUID", worker.UUID.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType),
 					zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("workerLen", len(worker.Data)))
 				worker.flushEsBuffer(buffer)
 				buffer = buffer[:0]
@@ -189,7 +189,7 @@ func (worker *IndexingWorkerV8) bulkChainedUpdate(updateCommandGroups [][]Update
 	}
 	if len(docs) == 0 {
 		zap.L().Warn("empty docs update", zap.String("typedIngesterUUID", worker.TypedIngester.UUID.String()),
-			zap.String("workerUUID", worker.Uuid.String()),
+			zap.String("workerUUID", worker.UUID.String()),
 			zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID))
 		return
 	}
@@ -259,7 +259,7 @@ func (worker *IndexingWorkerV8) getIndices(documentType string) ([]string, error
 	}
 
 	r := make(map[string]struct {
-		Aliases map[string]interface{} `json:"aliases"`
+		Aliases map[string]any `json:"aliases"`
 	})
 	if err = jsoniter.NewDecoder(res.Body).Decode(&r); err != nil {
 		zap.L().Error("decode alias response", zap.Error(err), zap.String("alias", alias),
@@ -362,7 +362,7 @@ type multiGetResponseItem struct {
 	// PrimaryTerm_ *int64                         `json:"_primary_term,omitempty"`
 	// Routing_     *string                        `json:"_routing,omitempty"`
 	// SeqNo_       *int64                         `json:"_seq_no,omitempty"`
-	Source_ map[string]interface{} `json:"_source,omitempty"`
+	Source_ map[string]any `json:"_source,omitempty"`
 	// Version_     *int64                         `json:"_version,omitempty"`
 }
 
@@ -378,7 +378,7 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsV2(index string, queries map[
 
 	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("index", index))
 
-	source := make(map[string]interface{})
+	source := make(map[string]any)
 	sourceItems := make([]types.MgetOperation, len(queries))
 	i := 0
 	for id := range queries {
@@ -443,7 +443,7 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocs(index string, queries []GetQ
 	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
 		zap.Int("WorkerID", worker.ID), zap.String("index", index))
 
-	source := make(map[string]interface{})
+	source := make(map[string]any)
 	sourceItems := make([]types.MgetOperation, len(queries))
 	for i, query := range queries {
 		sourceItems[i] = types.MgetOperation{Id_: query.ID}
@@ -501,7 +501,7 @@ func (worker *IndexingWorkerV8) applyMerges(documents [][]UpdateCommand, refDocs
 }
 
 // buildBulkIndexItem all modes: ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false/true
-func buildBulkIndexItem(index string, id string, source interface{}) ([]string, error) {
+func buildBulkIndexItem(index string, id string, source any) ([]string, error) {
 	lines := make([]string, 2)
 
 	meta := elasticsearch.BulkIndexMeta{
@@ -562,7 +562,7 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 
 	zap.L().Debug("Executing bulkindex", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("status", "done"))
 
-	// var r map[string]interface{}
+	// var r map[string]any
 	var r elasticsearch.BulkIndexResponse
 	if err = jsoniter.NewDecoder(res.Body).Decode(&r); err != nil {
 		zap.L().Error("decode bulk response", zap.Error(err))
@@ -571,7 +571,7 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 
 	// zap.L().Info("response", zap.Any("r", r))
 	if len(r.Failed()) > 0 {
-		zap.L().Warn("Error during bulkIndex", zap.String("typedIngesterUUID", worker.TypedIngester.UUID.String()), zap.String("workerUUID", worker.Uuid.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Docs", len(docs)), zap.Int("Errors", len(r.Failed())))
+		zap.L().Warn("Error during bulkIndex", zap.String("typedIngesterUUID", worker.TypedIngester.UUID.String()), zap.String("workerUUID", worker.UUID.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Docs", len(docs)), zap.Int("Errors", len(r.Failed())))
 		sampleItemFound := false
 		for _, item := range r.Items {
 			if item["index"].Error.Type == "" {

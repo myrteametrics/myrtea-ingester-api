@@ -81,7 +81,7 @@ func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]Updat
 
 	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID))
 
-	source := make(map[string]interface{})
+	source := make(map[string]any)
 	sourceItems := make([]types.MgetOperation, len(docs))
 	for i, doc := range docs {
 		sourceItems[i] = types.MgetOperation{Index_: some.String(doc.Index), Id_: doc.ID}
