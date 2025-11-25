@@ -4,7 +4,7 @@ go 1.25
 
 require (
 	github.com/elastic/go-elasticsearch/v8 v8.15.0
-	github.com/go-chi/chi/v5 v5.2.1
+	github.com/go-chi/chi/v5 v5.2.2
 	github.com/go-kit/kit v0.13.0
 	github.com/google/uuid v1.6.0
 	github.com/json-iterator/go v1.1.12

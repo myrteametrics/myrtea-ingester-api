@@ -101,6 +101,10 @@ func ApplyMergeLight(doc models.Document, command UpdateCommand) models.Document
 		output := command.MergeConfig.Apply(&command.NewDoc, &doc)
 		zap.L().Debug("ApplyMergeResult", zap.Any("output", output))
 		return *output
+	case connector.EnrichTo:
+		fallthrough
+	case connector.EnrichFrom:
+		fallthrough
 	default:
 		zap.L().Warn("mergeconfig mode not supported", zap.String("mode", command.MergeConfig.Mode.String()))
 	}

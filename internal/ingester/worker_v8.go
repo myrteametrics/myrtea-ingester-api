@@ -551,7 +551,8 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 		return errors.New("error during bulkrequest")
 	}
 
-	zap.L().Debug("Executing bulkindex", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("status", "done"))
+	zap.L().Debug("Executing bulkindex", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+		zap.Int("WorkerID", worker.ID), zap.String("status", "done"))
 
 	// var r map[string]any
 	var r elasticsearch.BulkIndexResponse
@@ -562,7 +563,9 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 
 	// zap.L().Info("response", zap.Any("r", r))
 	if len(r.Failed()) > 0 {
-		zap.L().Warn("Error during bulkIndex", zap.String("typedIngesterUUID", worker.TypedIngester.UUID.String()), zap.String("workerUUID", worker.UUID.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.Int("Docs", len(docs)), zap.Int("Errors", len(r.Failed())))
+		zap.L().Warn("Error during bulkIndex", zap.String("typedIngesterUUID", worker.TypedIngester.UUID.String()),
+			zap.String("workerUUID", worker.UUID.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+			zap.Int("WorkerID", worker.ID), zap.Int("Docs", len(docs)), zap.Int("Errors", len(r.Failed())))
 		sampleItemFound := false
 		for _, item := range r.Items {
 			if item["index"].Error.Type == "" {
