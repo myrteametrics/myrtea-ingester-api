@@ -300,10 +300,10 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsFullV2(indices []string, docs
 				}
 
 				// a document was found, add it to the refDocs map
-				refDocs[doc.Id_] = models.Document{ID: doc.Id_, Index: doc.Index_, IndexType: "_doc", Source: doc.Source_}
+				refDocs[doc.ID_] = models.Document{ID: doc.ID_, Index: doc.Index_, IndexType: "_doc", Source: doc.Source_}
 
 				// remove it from the batch
-				delete(batch, doc.Id_)
+				delete(batch, doc.ID_)
 			}
 
 			// Should we?
@@ -347,7 +347,7 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsFullV2(indices []string, docs
 //revive:disable:var-naming
 type multiGetResponseItem struct {
 	Found   bool           `json:"found"`
-	Id_     string         `json:"_id"`
+	ID_     string         `json:"_id"`
 	Index_  string         `json:"_index"`
 	Source_ map[string]any `json:"_source,omitempty"`
 }
@@ -434,7 +434,7 @@ func (worker *IndexingWorkerV8) perfomMgetRequest(ctx context.Context, r *mget.M
 // 	source := make(map[string]any)
 // 	sourceItems := make([]types.MgetOperation, len(queries))
 // 	for i, query := range queries {
-// 		sourceItems[i] = types.MgetOperation{Id_: query.ID}
+// 		sourceItems[i] = types.MgetOperation{ID_: query.ID}
 // 	}
 // 	source["docs"] = sourceItems
 //

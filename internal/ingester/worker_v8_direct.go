@@ -109,7 +109,7 @@ func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]Updat
 		}
 
 		if d.Found {
-			refDocs = append(refDocs, models.Document{ID: d.Id_, Index: d.Index_, IndexType: "_doc", Source: d.Source_})
+			refDocs = append(refDocs, models.Document{ID: d.ID_, Index: d.Index_, IndexType: "_doc", Source: d.Source_})
 		} else {
 			refDocs = append(refDocs, models.Document{})
 		}

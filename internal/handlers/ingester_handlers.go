@@ -55,11 +55,12 @@ func (handler *IngesterHandler) ReceiveData(w http.ResponseWriter, r *http.Reque
 
 	err = handler.bulkIngester.Ingest(bir)
 	if err != nil {
-		if errors.Is(err, ingester.ErrChannelOverload) {
+		switch {
+		case errors.Is(err, ingester.ErrChannelOverload):
 			w.WriteHeader(http.StatusTooManyRequests)
-		} else if err.Error() == "elasticsearch healthcheck red" { // Replace with custom error
+		case err.Error() == "elasticsearch healthcheck red":
 			w.WriteHeader(http.StatusInternalServerError)
-		} else if errors.Is(err, ingester.ErrDocumentTypeEmpty) {
+		case errors.Is(err, ingester.ErrDocumentTypeEmpty):
 			w.WriteHeader(http.StatusBadRequest)
 		}
 		return
