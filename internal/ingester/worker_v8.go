@@ -218,12 +218,8 @@ func (worker *IndexingWorkerV8) bulkChainedUpdate(updateCommandGroups [][]Update
 		zap.Int("WorkerID", worker.ID), zap.String("step", "multiGetFindRefDocsFull"))
 
 	start = time.Now()
-	refDocs, err := worker.multiGetFindRefDocsFullV2(indices, docs)
+	refDocs := worker.multiGetFindRefDocsFullV2(indices, docs)
 	worker.metricWorkerDirectMultiGetDuration.Observe(float64(time.Since(start).Nanoseconds()) / nanosPerSecond)
-
-	if err != nil {
-		zap.L().Error("multiGetFindRefDocsFull", zap.Error(err))
-	}
 
 	zap.L().Debug("BulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
 		zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
@@ -288,7 +284,7 @@ func (worker *IndexingWorkerV8) getIndices(documentType string) ([]string, error
 
 // multiGetFindRefDocsFullV2 part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false
 func (worker *IndexingWorkerV8) multiGetFindRefDocsFullV2(indices []string,
-	docs []GetQuery) (map[string]models.Document, error) {
+	docs []GetQuery) map[string]models.Document {
 	refDocs := map[string]models.Document{}
 	var mgetBatches []map[string]GetQuery
 	currentMgetBatch := map[string]GetQuery{}
@@ -322,48 +318,19 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsFullV2(indices []string,
 				}
 
 				// a document was found, add it to the refDocs map
-				refDocs[doc.ID_] = models.Document{ID: doc.ID_, Index: doc.Index_, IndexType: "_doc", Source: doc.Source_}
+				refDocs[doc.ID_] = models.Document{
+					ID: doc.ID_, Index: doc.Index_,
+					IndexType: "_doc", Source: doc.Source_,
+				}
 
 				// remove it from the batch
 				delete(batch, doc.ID_)
 			}
-			// Should we?
-			// mgetBatches = worker.reorderBatches(mgetBatches)
 		}
 	}
 
-	return refDocs, nil
+	return refDocs
 }
-
-// reorderBatches FIXME: not really optimised, should not be used, but rewritten
-// func (worker *IndexingWorkerV8) reorderBatches(mgetBatch []map[string]GetQuery) []map[string]GetQuery {
-// 	// here we reorder the batches, so that the first batch is the one with the most found documents (to avoid useless requests)
-// 	// the first must always have the most but limited by worker.mgetBatchSize
-// 	if len(mgetBatch) <= 1 {
-// 		return mgetBatch
-// 	}
-// 	for i := 1; i < len(mgetBatch); i++ {
-// 		// check if batch is full
-// 		if len(mgetBatch[i]) >= worker.mgetBatchSize {
-// 			continue
-// 		}
-//
-// 		// check if we have a next batch, continue else
-// 		if i+1 >= len(mgetBatch) {
-// 			continue
-// 		}
-//
-// 		// move as much as possible from the next batch to the current one (limited by worker.mgetBatchSize)
-// 		for k, v := range mgetBatch[i+1] {
-// 			if len(mgetBatch[i]) >= worker.mgetBatchSize {
-// 				break
-// 			}
-// 			mgetBatch[i][k] = v
-// 			delete(mgetBatch[i+1], k)
-// 		}
-// 	}
-// 	return mgetBatch
-// }
 
 //revive:disable:var-naming
 type multiGetResponseItem struct {
