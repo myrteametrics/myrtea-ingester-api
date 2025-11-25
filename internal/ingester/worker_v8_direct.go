@@ -58,11 +58,21 @@ func (worker *IndexingWorkerV8) applyDirectMerges(updateCommandGroups [][]Update
 	for i, updateCommandGroup := range updateCommandGroups {
 		var pushDoc models.Document
 		if len(refDocs) > i {
-			pushDoc = models.Document{ID: refDocs[i].ID, Index: refDocs[i].Index, IndexType: refDocs[i].IndexType, Source: refDocs[i].Source}
+			pushDoc = models.Document{
+				ID:        refDocs[i].ID,
+				Index:     refDocs[i].Index,
+				IndexType: refDocs[i].IndexType,
+				Source:    refDocs[i].Source,
+			}
 		}
 		for _, command := range updateCommandGroup {
 			if pushDoc.ID == "" {
-				pushDoc = models.Document{ID: command.NewDoc.ID, Index: command.NewDoc.Index, IndexType: command.NewDoc.IndexType, Source: command.NewDoc.Source}
+				pushDoc = models.Document{
+					ID:        command.NewDoc.ID,
+					Index:     command.NewDoc.Index,
+					IndexType: command.NewDoc.IndexType,
+					Source:    command.NewDoc.Source,
+				}
 			} else {
 				pushDoc = ApplyMergeLight(pushDoc, command)
 			}
@@ -80,7 +90,8 @@ func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]Updat
 		docs = append(docs, &models.Document{Index: updateCommandGroup[0].Index, ID: updateCommandGroup[0].DocumentID})
 	}
 
-	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID))
+	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+		zap.Int("WorkerID", worker.ID))
 
 	source := make(map[string]any)
 	sourceItems := make([]types.MgetOperation, len(docs))
@@ -94,7 +105,8 @@ func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]Updat
 
 	ctx, cancel := context.WithTimeout(context.Background(), 3*time.Minute)
 	defer cancel()
-	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType), zap.Int("WorkerID", worker.ID), zap.String("status", "done"))
+	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+		zap.Int("WorkerID", worker.ID), zap.String("status", "done"))
 	response, err := worker.perfomMgetRequest(ctx, elasticsearch.C().Mget().Request(req))
 	if err != nil || response.Docs == nil || len(response.Docs) == 0 {
 		zap.L().Error("perfomMgetRequest (self)", zap.Error(err))
