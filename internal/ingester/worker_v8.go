@@ -104,18 +104,24 @@ func (worker *IndexingWorkerV8) Run() {
 	forceFlushTimeout := viper.GetInt("WORKER_FORCE_FLUSH_TIMEOUT_SEC")
 	forceFlush := worker.resetForceFlush(forceFlushTimeout)
 
+	uid := worker.TypedIngester.UUID.String()
+
 	for {
 		select {
 		// Send indexing bulk (when buffer is full or on timeout)
 		case <-forceFlush:
-			zap.L().Info("Try on after timeout reached", zap.String("typedIngesterUUID", worker.TypedIngester.UUID.String()),
-				zap.String("workerUUID", worker.UUID.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType),
-				zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("workerLen", len(worker.Data)),
+			zap.L().Info("Try on after timeout reached", zap.String("typedIngesterUUID", uid),
+				zap.String("workerUUID", worker.UUID.String()),
+				zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+				zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)),
+				zap.Int("workerLen", len(worker.Data)),
 				zap.Int("Timeout", forceFlushTimeout))
 			if len(buffer) > 0 {
-				zap.L().Info("Flushing on timeout reached", zap.String("typedIngesterUUID", worker.TypedIngester.UUID.String()),
-					zap.String("workerUUID", worker.UUID.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType),
-					zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("workerLen", len(worker.Data)),
+				zap.L().Info("Flushing on timeout reached", zap.String("typedIngesterUUID", uid),
+					zap.String("workerUUID", worker.UUID.String()),
+					zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+					zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)),
+					zap.Int("workerLen", len(worker.Data)),
 					zap.Int("Timeout", forceFlushTimeout))
 				worker.flushEsBuffer(buffer)
 				buffer = buffer[:0]
@@ -124,14 +130,17 @@ func (worker *IndexingWorkerV8) Run() {
 
 		// Build indexing bulk
 		case uc := <-worker.Data:
-			zap.L().Debug("Receive UpdateCommand", zap.String("typedIngesterUUID", worker.TypedIngester.UUID.String()),
-				zap.String("workerUUID", worker.UUID.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+			zap.L().Debug("Receive UpdateCommand", zap.String("typedIngesterUUID", uid),
+				zap.String("workerUUID", worker.UUID.String()),
+				zap.String("TypedIngester", worker.TypedIngester.DocumentType),
 				zap.Int("WorkerID", worker.ID), zap.Any("UpdateCommand", uc))
 			buffer = append(buffer, uc)
 			if len(buffer) >= bufferLength {
-				zap.L().Info("Try flushing on full buffer", zap.String("typedIngesterUUID", worker.TypedIngester.UUID.String()),
-					zap.String("workerUUID", worker.UUID.String()), zap.String("TypedIngester", worker.TypedIngester.DocumentType),
-					zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)), zap.Int("workerLen", len(worker.Data)))
+				zap.L().Info("Try flushing on full buffer", zap.String("typedIngesterUUID", uid),
+					zap.String("workerUUID", worker.UUID.String()),
+					zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+					zap.Int("WorkerID", worker.ID), zap.Int("Messages", len(buffer)),
+					zap.Int("workerLen", len(worker.Data)))
 				worker.flushEsBuffer(buffer)
 				buffer = buffer[:0]
 				forceFlush = worker.resetForceFlush(forceFlushTimeout)
@@ -278,7 +287,8 @@ func (worker *IndexingWorkerV8) getIndices(documentType string) ([]string, error
 }
 
 // multiGetFindRefDocsFullV2 part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false
-func (worker *IndexingWorkerV8) multiGetFindRefDocsFullV2(indices []string, docs []GetQuery) (map[string]models.Document, error) {
+func (worker *IndexingWorkerV8) multiGetFindRefDocsFullV2(indices []string,
+	docs []GetQuery) (map[string]models.Document, error) {
 	refDocs := map[string]models.Document{}
 	var mgetBatches []map[string]GetQuery
 	currentMgetBatch := map[string]GetQuery{}
@@ -317,7 +327,6 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsFullV2(indices []string, docs
 				// remove it from the batch
 				delete(batch, doc.ID_)
 			}
-
 			// Should we?
 			// mgetBatches = worker.reorderBatches(mgetBatches)
 		}

@@ -31,12 +31,8 @@ func (worker *IndexingWorkerV8) directBulkChainedUpdate(updateCommandGroups [][]
 		zap.Int("WorkerID", worker.ID), zap.String("step", "applyMerges"))
 
 	start = time.Now()
-	push, err := worker.applyDirectMerges(updateCommandGroups, refDocs)
+	push := worker.applyDirectMerges(updateCommandGroups, refDocs)
 	worker.metricWorkerApplyMergesDuration.Observe(float64(time.Since(start).Nanoseconds()) / nanosPerSecond)
-
-	if err != nil {
-		zap.L().Error("applyDirectMerges", zap.Error(err))
-	}
 
 	zap.L().Debug("DirectBulkChainUpdate", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
 		zap.Int("WorkerID", worker.ID), zap.String("step", "bulkIndex"))
@@ -54,7 +50,7 @@ func (worker *IndexingWorkerV8) directBulkChainedUpdate(updateCommandGroups [][]
 
 // applyDirectMerges part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=true
 func (worker *IndexingWorkerV8) applyDirectMerges(updateCommandGroups [][]UpdateCommand,
-	refDocs []models.Document) ([]models.Document, error) {
+	refDocs []models.Document) []models.Document {
 	push := make([]models.Document, 0)
 	for i, updateCommandGroup := range updateCommandGroups {
 		var pushDoc models.Document
@@ -81,7 +77,7 @@ func (worker *IndexingWorkerV8) applyDirectMerges(updateCommandGroups [][]Update
 		push = append(push, pushDoc)
 	}
 
-	return push, nil
+	return push
 }
 
 // directMultiGetDocs part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=true
