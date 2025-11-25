@@ -355,15 +355,15 @@ func (worker *IndexingWorkerV8) reorderBatches(mgetBatch []map[string]GetQuery) 
 }
 
 type multiGetResponseItem struct {
-	//Fields       map[string]jsoniter.RawMessage `json:"fields,omitempty"`
+	// Fields       map[string]jsoniter.RawMessage `json:"fields,omitempty"`
 	Found  bool   `json:"found"`
 	Id_    string `json:"_id"`
 	Index_ string `json:"_index"`
-	//PrimaryTerm_ *int64                         `json:"_primary_term,omitempty"`
-	//Routing_     *string                        `json:"_routing,omitempty"`
-	//SeqNo_       *int64                         `json:"_seq_no,omitempty"`
+	// PrimaryTerm_ *int64                         `json:"_primary_term,omitempty"`
+	// Routing_     *string                        `json:"_routing,omitempty"`
+	// SeqNo_       *int64                         `json:"_seq_no,omitempty"`
 	Source_ map[string]interface{} `json:"_source,omitempty"`
-	//Version_     *int64                         `json:"_version,omitempty"`
+	// Version_     *int64                         `json:"_version,omitempty"`
 }
 
 type multiGetResponse struct {
