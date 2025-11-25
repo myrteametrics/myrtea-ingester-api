@@ -43,7 +43,6 @@ var (
 
 // NewTypedIngester returns a pointer to a new TypedIngester instance
 func NewTypedIngester(bulkIngester *BulkIngester, documentType string) *TypedIngester {
-
 	ingester := TypedIngester{
 		UUID:                          uuid.New(),
 		bulkIngester:                  bulkIngester,

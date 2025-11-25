@@ -344,17 +344,15 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsFullV2(indices []string, docs
 // 	return mgetBatch
 // }
 
+//revive:disable:var-naming
 type multiGetResponseItem struct {
-	// Fields       map[string]jsoniter.RawMessage `json:"fields,omitempty"`
-	Found  bool   `json:"found"`
-	Id_    string `json:"_id"`
-	Index_ string `json:"_index"`
-	// PrimaryTerm_ *int64                         `json:"_primary_term,omitempty"`
-	// Routing_     *string                        `json:"_routing,omitempty"`
-	// SeqNo_       *int64                         `json:"_seq_no,omitempty"`
+	Found   bool           `json:"found"`
+	Id_     string         `json:"_id"`
+	Index_  string         `json:"_index"`
 	Source_ map[string]any `json:"_source,omitempty"`
-	// Version_     *int64                         `json:"_version,omitempty"`
 }
+
+//revive:enable:var-naming
 
 type multiGetResponse struct {
 	Docs []multiGetResponseItem `json:"docs"`
@@ -425,40 +423,40 @@ func (worker *IndexingWorkerV8) perfomMgetRequest(ctx context.Context, r *mget.M
 }
 
 // multiGetFindRefDocs part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false
-func (worker *IndexingWorkerV8) multiGetFindRefDocs(index string, queries []GetQuery) ([]types.MgetResponseItem, error) {
-	if len(queries) == 0 {
-		return nil, errors.New("docs[] is empty")
-	}
-
-	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
-		zap.Int("WorkerID", worker.ID), zap.String("index", index))
-
-	source := make(map[string]any)
-	sourceItems := make([]types.MgetOperation, len(queries))
-	for i, query := range queries {
-		sourceItems[i] = types.MgetOperation{Id_: query.ID}
-	}
-	source["docs"] = sourceItems
-
-	req := mget.NewRequest()
-	req.Docs = sourceItems
-
-	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
-	defer cancel()
-	response, err := elasticsearch.C().Mget().Index(index).Request(req).Do(ctx)
-	if err != nil {
-		zap.L().Warn("json encode source", zap.Error(err))
-	}
-
-	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
-		zap.Int("WorkerID", worker.ID), zap.String("index", index), zap.String("status", "done"))
-
-	if err != nil || response.Docs == nil || len(response.Docs) == 0 {
-		zap.L().Error("MultiGet (self)", zap.Error(err))
-		return make([]types.MgetResponseItem, 0), err
-	}
-	return response.Docs, nil
-}
+// func (worker *IndexingWorkerV8) multiGetFindRefDocs(index string, queries []GetQuery) ([]types.MgetResponseItem, error) {
+// 	if len(queries) == 0 {
+// 		return nil, errors.New("docs[] is empty")
+// 	}
+//
+// 	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+// 		zap.Int("WorkerID", worker.ID), zap.String("index", index))
+//
+// 	source := make(map[string]any)
+// 	sourceItems := make([]types.MgetOperation, len(queries))
+// 	for i, query := range queries {
+// 		sourceItems[i] = types.MgetOperation{Id_: query.ID}
+// 	}
+// 	source["docs"] = sourceItems
+//
+// 	req := mget.NewRequest()
+// 	req.Docs = sourceItems
+//
+// 	ctx, cancel := context.WithTimeout(context.Background(), 2*time.Minute)
+// 	defer cancel()
+// 	response, err := elasticsearch.C().Mget().Index(index).Request(req).Do(ctx)
+// 	if err != nil {
+// 		zap.L().Warn("json encode source", zap.Error(err))
+// 	}
+//
+// 	zap.L().Debug("Executing multiget", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+// 		zap.Int("WorkerID", worker.ID), zap.String("index", index), zap.String("status", "done"))
+//
+// 	if err != nil || response.Docs == nil || len(response.Docs) == 0 {
+// 		zap.L().Error("MultiGet (self)", zap.Error(err))
+// 		return make([]types.MgetResponseItem, 0), err
+// 	}
+// 	return response.Docs, nil
+// }
 
 // applyMerges part of ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false
 func (worker *IndexingWorkerV8) applyMerges(documents [][]UpdateCommand, refDocs map[string]models.Document) ([]models.Document, error) {
@@ -581,11 +579,7 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 
 		errorsMap := make(map[string]int64)
 		for _, item := range r.Items {
-			if _, found := errorsMap[item["index"].Error.Type]; found {
-				errorsMap[item["index"].Error.Type]++
-			} else {
-				errorsMap[item["index"].Error.Type] = 1
-			}
+			errorsMap[item["index"].Error.Type]++
 		}
 		zap.L().Warn("Error typology mapping", zap.Any("errors", errorsMap))
 		return errors.New("bulkindex failed > 0")
