@@ -31,6 +31,7 @@ func InitElasticsearch() {
 	// Apply insecure TLS if enabled
 	if insecure {
 		esClientConfig.Transport = &http.Transport{
+			// #nosec G402 -- explicit: allow insecure TLS when configured via ELASTICSEARCH_INSECURE
 			TLSClientConfig: &tls.Config{InsecureSkipVerify: insecure},
 		}
 		zap.L().Warn("ElasticSearch TLS verification disabled (insecure mode)")
