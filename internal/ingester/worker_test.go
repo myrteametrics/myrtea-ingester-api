@@ -155,7 +155,7 @@ func TestDirectBulkChainedUpdate(t *testing.T) {
 
 // buildBulkIndexItem
 func TestBuildBulkIndexItem(t *testing.T) {
-	str, err := buildBulkIndexItem("testindex", "1", map[string]interface{}{
+	str, err := buildBulkIndexItem("testindex", "1", map[string]any{
 		"a": "a",
 		"b": "b",
 	})
