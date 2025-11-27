@@ -482,7 +482,6 @@ func buildBulkIndexItem(index string, id string, source any) ([]string, error) {
 	meta := elasticsearch.BulkIndexMeta{
 		Index: elasticsearch.BulkIndexMetaDetail{
 			S_Index: index,
-			S_Type:  "_doc",
 			S_Id:    id,
 		},
 	}

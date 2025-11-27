@@ -152,3 +152,16 @@ func TestDirectBulkChainedUpdate(t *testing.T) {
 	indexingWorker.directBulkChainedUpdate(updateCommandGroups)
 	t.Fail()
 }
+
+// buildBulkIndexItem
+func TestBuildBulkIndexItem(t *testing.T) {
+	str, err := buildBulkIndexItem("testindex", "1", map[string]any{
+		"a": "a",
+		"b": "b",
+	})
+	if err != nil {
+		t.Errorf("Error building bulk index item: %s", err)
+	} else {
+		t.Log(str)
+	}
+}

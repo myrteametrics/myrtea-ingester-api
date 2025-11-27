@@ -1,4 +1,4 @@
-FROM alpine:3.14
+FROM alpine:3.19.1
 LABEL maintainer="Mind7 Consulting <contact@mind7.com>"
 
 RUN apk update && apk add --no-cache ca-certificates && rm -rf /var/cache/apk/*

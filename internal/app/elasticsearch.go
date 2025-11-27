@@ -1,6 +1,9 @@
 package app
 
 import (
+	"crypto/tls"
+	"net/http"
+
 	"github.com/elastic/go-elasticsearch/v8"
 	es "github.com/myrteametrics/myrtea-sdk/v5/elasticsearch"
 	"github.com/spf13/viper"
@@ -8,21 +11,36 @@ import (
 )
 
 func InitElasticsearch() {
-	version := viper.GetInt("ELASTICSEARCH_VERSION")
 	urls := viper.GetStringSlice("ELASTICSEARCH_URLS")
+	auth := viper.GetBool("ELASTICSEARCH_AUTH")
+	insecure := viper.GetBool("ELASTICSEARCH_INSECURE")
+	username := viper.GetString("ELASTICSEARCH_USERNAME")
+	password := viper.GetString("ELASTICSEARCH_PASSWORD")
 
-	switch version {
-	case 7:
-		fallthrough
-	case 8:
-		err := es.ReplaceGlobals(elasticsearch.Config{
-			Addresses:     urls,
-			EnableMetrics: true,
-		})
-		if err != nil {
-			zap.L().Fatal("Cannot connect to Elasticsearch", zap.Error(err))
+	// Build elasticsearch client config
+	esClientConfig := elasticsearch.Config{
+		Addresses: urls,
+	}
+
+	if auth {
+		zap.L().Warn("ElasticSearch authentication enabled", zap.String("username", username))
+		esClientConfig.Username = username
+		esClientConfig.Password = password
+	}
+
+	// Apply insecure TLS if enabled
+	if insecure {
+		esClientConfig.Transport = &http.Transport{
+			// #nosec G402 -- explicit: allow insecure TLS when configured via ELASTICSEARCH_INSECURE
+			TLSClientConfig: &tls.Config{InsecureSkipVerify: insecure},
 		}
-	default:
-		zap.L().Fatal("Unsupported Elasticsearch version", zap.Int("version", version))
+		zap.L().Warn("ElasticSearch TLS verification disabled (insecure mode)")
+	}
+
+	zap.L().Info("Initializing ElasticSearch client", zap.Strings("urls", urls),
+		zap.Bool("auth", auth), zap.Bool("insecure", insecure))
+	err := es.ReplaceGlobals(esClientConfig)
+	if err != nil {
+		zap.L().Error("es.ReplaceGlobals", zap.Error(err))
 	}
 }

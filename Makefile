@@ -40,7 +40,7 @@ GO_PACKAGE ?= go list ./... | \
 	grep github.com/myrteametrics/$(PACKAGE_PATH)/ | \
 	grep -v -e "github.com/myrteametrics/$(PACKAGE_PATH)/docs" | \
 	grep -v -e "github.com/myrteametrics/$(PACKAGE_PATH)/protobuf" | \
-	grep -v -e "github.com/myrteametrics/$(PACKAGE_PATH)/internals/tests"
+	grep -v -e "github.com/myrteametrics/$(PACKAGE_PATH)/internal/tests"
 
 # Go tools
 export GOBIN ?= $(shell go env GOPATH)/bin

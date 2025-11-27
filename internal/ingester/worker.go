@@ -1,7 +1,6 @@
 package ingester
 
 import (
-	"errors"
 	"fmt"
 	"strings"
 
@@ -23,17 +22,8 @@ type IndexingWorker interface {
 }
 
 func NewIndexingWorker(typedIngester *TypedIngester, id int) (IndexingWorker, error) {
-	version := viper.GetInt("ELASTICSEARCH_VERSION")
 	mgetBatchSize := viper.GetInt("ELASTICSEARCH_MGET_BATCH_SIZE")
-	switch version {
-	case 7:
-		fallthrough
-	case 8:
-		return NewIndexingWorkerV8(typedIngester, id, mgetBatchSize), nil
-	default:
-		zap.L().Fatal("Unsupported Elasticsearch version", zap.Int("version", version))
-		return nil, errors.New("unsupported Elasticsearch version")
-	}
+	return NewIndexingWorkerV8(typedIngester, id, mgetBatchSize), nil
 }
 
 var (
