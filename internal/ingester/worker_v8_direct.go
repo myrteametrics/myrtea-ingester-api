@@ -107,6 +107,7 @@ func (worker *IndexingWorkerV8) directMultiGetDocs(updateCommandGroups [][]Updat
 	response, err := worker.perfomMgetRequest(ctx, elasticsearch.C().Mget().Request(req))
 	if err != nil || response.Docs == nil || len(response.Docs) == 0 {
 		zap.L().Error("perfomMgetRequest (self)", zap.Error(err))
+		return nil, err
 	}
 
 	refDocs := make([]models.Document, 0)
