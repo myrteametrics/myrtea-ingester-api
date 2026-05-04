@@ -160,31 +160,80 @@ func (worker *IndexingWorkerV8) flushEsBuffer(buffer []UpdateCommand) {
 	}
 
 	start := time.Now()
-	updateCommandGroupsMap := make(map[string][]UpdateCommand)
+
+	// Separate append-only commands from regular merge commands.
+	appendOnlyBuffer := make([]UpdateCommand, 0)
+	regularBuffer := make([]UpdateCommand, 0)
 	for _, uc := range buffer {
-		if updateCommandGroupsMap[uc.DocumentID] != nil {
-			updateCommandGroupsMap[uc.DocumentID] = append(updateCommandGroupsMap[uc.DocumentID], uc)
+		if uc.AppendOnly {
+			appendOnlyBuffer = append(appendOnlyBuffer, uc)
 		} else {
-			updateCommandGroupsMap[uc.DocumentID] = []UpdateCommand{uc}
+			regularBuffer = append(regularBuffer, uc)
 		}
 	}
 
-	updateCommandGroups := make([][]UpdateCommand, 0)
-	for _, v := range updateCommandGroupsMap {
-		updateCommandGroups = append(updateCommandGroups, v)
-	}
-
 	if viper.GetBool("DEBUG_DRY_RUN_ELASTICSEARCH") {
+		worker.metricWorkerMessage.With("status", "flushed").Add(float64(len(buffer)))
+		worker.metricWorkerFlushDuration.Observe(float64(time.Since(start).Nanoseconds()) / nanosPerSecond)
 		return
 	}
-	if viper.GetBool("ELASTICSEARCH_DIRECT_MULTI_GET_MODE") {
-		worker.directBulkChainedUpdate(updateCommandGroups)
-	} else {
-		worker.bulkChainedUpdate(updateCommandGroups)
+
+	// Process append-only docs: skip mget + merge, insert directly.
+	if len(appendOnlyBuffer) > 0 {
+		worker.appendOnlyBulkIndex(appendOnlyBuffer)
+	}
+
+	// Process regular docs: group by DocumentID then mget + merge.
+	if len(regularBuffer) > 0 {
+		updateCommandGroupsMap := make(map[string][]UpdateCommand)
+		for _, uc := range regularBuffer {
+			if updateCommandGroupsMap[uc.DocumentID] != nil {
+				updateCommandGroupsMap[uc.DocumentID] = append(updateCommandGroupsMap[uc.DocumentID], uc)
+			} else {
+				updateCommandGroupsMap[uc.DocumentID] = []UpdateCommand{uc}
+			}
+		}
+
+		updateCommandGroups := make([][]UpdateCommand, 0)
+		for _, v := range updateCommandGroupsMap {
+			updateCommandGroups = append(updateCommandGroups, v)
+		}
+
+		if viper.GetBool("ELASTICSEARCH_DIRECT_MULTI_GET_MODE") {
+			worker.directBulkChainedUpdate(updateCommandGroups)
+		} else {
+			worker.bulkChainedUpdate(updateCommandGroups)
+		}
 	}
 
 	worker.metricWorkerMessage.With("status", "flushed").Add(float64(len(buffer)))
 	worker.metricWorkerFlushDuration.Observe(float64(time.Since(start).Nanoseconds()) / nanosPerSecond)
+}
+
+// appendOnlyBulkIndex processes append-only commands by skipping the mget lookup and merge steps.
+// Each document is inserted directly as a new document in Elasticsearch.
+func (worker *IndexingWorkerV8) appendOnlyBulkIndex(commands []UpdateCommand) {
+	zap.L().Debug("AppendOnlyBulkIndex", zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+		zap.Int("WorkerID", worker.ID), zap.Int("count", len(commands)))
+
+	start := time.Now()
+	docs := make([]models.Document, 0, len(commands))
+	for _, cmd := range commands {
+		docs = append(docs, models.Document{
+			ID:        cmd.NewDoc.ID,
+			Index:     buildAliasName(cmd.DocumentType, index.Last),
+			IndexType: "document",
+			Source:    cmd.NewDoc.Source,
+		})
+	}
+	worker.metricWorkerApplyMergesDuration.Observe(float64(time.Since(start).Nanoseconds()) / nanosPerSecond)
+
+	start = time.Now()
+	err := worker.bulkIndex(docs)
+	worker.metricWorkerBulkIndexDuration.Observe(float64(time.Since(start).Nanoseconds()) / nanosPerSecond)
+	if err != nil {
+		zap.L().Error("appendOnlyBulkIndex", zap.Error(err))
+	}
 }
 
 // bulkChainedUpdate process multiple groups of UpdateCommand
