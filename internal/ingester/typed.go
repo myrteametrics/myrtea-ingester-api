@@ -84,9 +84,17 @@ func (ingester *TypedIngester) Run() {
 		zap.L().Debug("Receive IngestRequest", zap.String("IngesterType", ingester.DocumentType),
 			zap.Any("IngestRequest", ir))
 
-		workerID := getWorker(ir.Doc.ID, ingester.maxWorkers)
+		// In case of append only without routing key, this ensures parallelization
+		routingKey := ir.Doc.ID
+		if ir.AppendOnly && routingKey == "" {
+			routingKey = uuid.NewString()
+		}
+
+		workerID := getWorker(routingKey, ingester.maxWorkers)
 		worker := ingester.Workers[workerID]
-		updateCommand := NewUpdateCommand(ir.Doc.Index, ir.Doc.ID, ir.DocumentType, ir.Doc, ir.MergeConfig)
+		updateCommand := NewUpdateCommand(
+			ir.Doc.Index, ir.Doc.ID, ir.DocumentType, ir.Doc, ir.MergeConfig, ir.AppendOnly,
+		)
 		zap.L().Debug("Send UpdateCommand", zap.String("IngesterType", ingester.DocumentType),
 			zap.Int("WorkerID", workerID), zap.Any("updateCommand", updateCommand),
 			zap.Any("len(chan)", len(ingester.Workers[workerID].GetData())))
