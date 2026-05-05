@@ -45,7 +45,17 @@ func (worker *IndexingWorkerV8) directBulkChainedUpdate(commandGroups [][]Update
 	existingDocs, err := worker.directMultiGetDocs(commandGroups)
 	worker.metricWorkerDirectMultiGetDuration.Observe(float64(time.Since(start).Nanoseconds()) / nanosPerSecond)
 	if err != nil {
-		zap.L().Error("directMultiGetDocs failed", zap.Error(err))
+		// ⚠ Abort: if we cannot fetch the current document state we must NOT
+		// proceed with the merge.  Continuing with existingDocs=nil would treat
+		// every document as a brand-new insert and silently overwrite existing ES
+		// data with only the partial incoming payload.
+		zap.L().Error("directMultiGetDocs failed – aborting flush to prevent data corruption",
+			zap.Error(err),
+			zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+			zap.Int("WorkerID", worker.ID),
+			zap.Int("affectedGroups", len(commandGroups)),
+		)
+		return
 	}
 
 	// Step 2 – merge pending commands on top of the fetched state.
@@ -121,6 +131,11 @@ func (worker *IndexingWorkerV8) applyDirectMerges(
 // If a document is not found its slot in the result slice is an empty
 // models.Document{} so callers can detect the absence by checking ID == "".
 // (Used only in ELASTICSEARCH_DIRECT_MULTI_GET_MODE=true.)
+//
+// TODO(perf): the full _source is fetched for every document.  If the
+// MergeConfig only touches a small subset of fields, passing source_includes
+// in the MgetOperation would reduce network traffic significantly.  This
+// requires threading the field list from the UpdateCommand down here.
 func (worker *IndexingWorkerV8) directMultiGetDocs(commandGroups [][]UpdateCommand) ([]models.Document, error) {
 	// Build one MgetOperation per command group.
 	mgetItems := make([]types.MgetOperation, 0, len(commandGroups))

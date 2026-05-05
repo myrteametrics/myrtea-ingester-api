@@ -180,19 +180,20 @@ func (worker *IndexingWorkerV8) Run() {
 	buffer := make([]UpdateCommand, 0, maxBufferSize)
 
 	forceFlushSec := viper.GetInt("WORKER_FORCE_FLUSH_TIMEOUT_SEC")
-	forceFlush := worker.newFlushTimer(forceFlushSec)
+	flushTimer := time.NewTimer(time.Duration(forceFlushSec) * time.Second)
+	defer flushTimer.Stop()
 
 	ingesterUID := worker.TypedIngester.UUID.String()
 
 	for {
 		select {
-		case <-forceFlush:
+		case <-flushTimer.C:
 			worker.logFlushEvent("timeout", ingesterUID, len(buffer), forceFlushSec)
 			if len(buffer) > 0 {
 				worker.flushEsBuffer(buffer)
 				buffer = buffer[:0]
 			}
-			forceFlush = worker.newFlushTimer(forceFlushSec)
+			flushTimer.Reset(time.Duration(forceFlushSec) * time.Second)
 
 		case cmd := <-worker.Data:
 			zap.L().Debug("Receive UpdateCommand",
@@ -208,17 +209,19 @@ func (worker *IndexingWorkerV8) Run() {
 				worker.logFlushEvent("full buffer", ingesterUID, len(buffer), forceFlushSec)
 				worker.flushEsBuffer(buffer)
 				buffer = buffer[:0]
-				forceFlush = worker.newFlushTimer(forceFlushSec)
+				// Stop + drain the timer before resetting to avoid a spurious
+				// fire if the timer fires between Stop and Reset.
+				if !flushTimer.Stop() {
+					select {
+					case <-flushTimer.C:
+					default:
+					}
+				}
+				flushTimer.Reset(time.Duration(forceFlushSec) * time.Second)
 			}
 			worker.metricWorkerQueueGauge.Set(float64(len(worker.Data)))
 		}
 	}
-}
-
-// newFlushTimer returns a channel that fires after sec seconds.
-// It replaces the old resetForceFlush helper with a more descriptive name.
-func (worker *IndexingWorkerV8) newFlushTimer(sec int) <-chan time.Time {
-	return time.After(time.Duration(sec) * time.Second)
 }
 
 // logFlushEvent emits a structured log line explaining why a flush is about to happen.
@@ -254,7 +257,10 @@ func (worker *IndexingWorkerV8) flushEsBuffer(buffer []UpdateCommand) {
 	start := time.Now()
 
 	// Partition the buffer.
-	var regularCmds, appendOnlyCmds []UpdateCommand
+	// Pre-allocate at half capacity each – in most workloads the buffer is
+	// either all-regular or all-append-only, so this is a safe lower bound.
+	regularCmds := make([]UpdateCommand, 0, len(buffer))
+	appendOnlyCmds := make([]UpdateCommand, 0)
 	for _, cmd := range buffer {
 		if cmd.AppendOnly {
 			appendOnlyCmds = append(appendOnlyCmds, cmd)
@@ -391,7 +397,16 @@ func (worker *IndexingWorkerV8) bulkChainedUpdate(commandGroups [][]UpdateComman
 	concreteIndices, err := worker.getIndices(lookupKeys[0].DocumentType)
 	worker.metricWorkerGetIndicesDuration.Observe(float64(time.Since(start).Nanoseconds()) / nanosPerSecond)
 	if err != nil {
-		zap.L().Error("getIndices failed", zap.Error(err))
+		// ⚠ Abort: without the alias resolution we cannot run mget, so we
+		// cannot safely merge.  Log and drop this batch rather than blindly
+		// overwriting existing documents with partial data.
+		zap.L().Error("bulkChainedUpdate: getIndices failed – aborting flush",
+			zap.Error(err),
+			zap.String("TypedIngester", worker.TypedIngester.DocumentType),
+			zap.Int("WorkerID", worker.ID),
+			zap.Int("affectedGroups", len(commandGroups)),
+		)
+		return
 	}
 
 	// Step 2 – fetch the current document state from ES.
@@ -697,6 +712,10 @@ func buildBulkCreateItem(targetIndex, id string, source any) ([]string, error) {
 
 // bulkCreate sends a single ES bulk request using "create" actions for every
 // document in docs.  It is used exclusively by appendOnlyBulkIndex.
+//
+// TODO(reliability): there is no retry logic.  A transient 429 / 503 response
+// from ES causes documents to be silently dropped.  Consider an exponential
+// back-off retry with a dead-letter queue for persistent failures.
 func (worker *IndexingWorkerV8) bulkCreate(docs []models.Document) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
@@ -801,6 +820,10 @@ func buildBulkIndexItem(targetIndex, id string, source any) ([]string, error) {
 
 // bulkIndex sends a single ES bulk request using "index" actions (upsert).
 // Used by both ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false and =true.
+//
+// TODO(reliability): no retry.  A 429/503 silently drops the entire batch.
+// TODO(es): consider adding "require_alias": true to the bulk meta so that a
+// misconfigured write on a concrete index (instead of the alias) fails loudly.
 func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
