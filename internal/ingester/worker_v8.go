@@ -745,6 +745,10 @@ func (worker *IndexingWorkerV8) bulkCreate(docs []models.Document) error {
 		zap.L().Error("bulkCreate: request failed", zap.Error(err))
 		return err
 	}
+	defer func() {
+		_ = res.Body.Close()
+	}()
+
 	if res.IsError() {
 		zap.L().Error("bulkCreate: ES returned an error",
 			zap.Strings("warnings", res.Warnings()),
@@ -791,8 +795,16 @@ func (worker *IndexingWorkerV8) bulkCreate(docs []models.Document) error {
 // for a bulk "index" action (upsert semantics – overwrites if the ID exists).
 // Used by both ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false and =true.
 //
-// When id is empty the "_id" field is omitted so ES auto-generates the ID.
+// An empty id is rejected with an error: unlike the append-only "create" path
+// (which intentionally lets ES auto-generate IDs), the regular update path
+// keys every mget/merge operation on the document ID.  Allowing an empty ID
+// here would silently produce an anonymous insert instead of surfacing the
+// bad input to the caller.
 func buildBulkIndexItem(targetIndex, id string, source any) ([]string, error) {
+	if id == "" {
+		return nil, errors.New("buildBulkIndexItem: document ID must not be empty for regular bulk-index operations")
+	}
+
 	// Same omitempty trick as buildBulkCreateItem: an explicit "" causes an
 	// illegal_argument_exception on the ES side.
 	type bulkIndexDetail struct {
@@ -853,6 +865,10 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 		zap.L().Error("bulkIndex: request failed", zap.Error(err))
 		return err
 	}
+	defer func() {
+		_ = res.Body.Close()
+	}()
+
 	if res.IsError() {
 		zap.L().Error("bulkIndex: ES returned an error",
 			zap.Strings("warnings", res.Warnings()),
