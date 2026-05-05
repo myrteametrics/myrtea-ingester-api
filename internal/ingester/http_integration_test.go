@@ -69,6 +69,10 @@ const (
 	// regular (AppendOnly=false) tests.  Re-using the same IDs across multiple
 	// runs exercises the merge path (mget hit → merge → index).
 	testFixedIDPoolSize = 10
+
+	// testIndexType is the ES document type used in test documents.  Should match
+	// the default type used by the ingester (currently "document") to avoid confusion in ES logs.
+	testIndexType = "document"
 )
 
 // ─── Payload types (mirrors BulkIngestRequest / Document / connector.Config) ──
@@ -183,7 +187,7 @@ func buildAppendOnlyDocs(rng *rand.Rand, n int) []testDocument {
 			// Empty ID → ES auto-generates; avoids 409 conflicts on re-runs.
 			ID:        "",
 			Index:     testIndexName,
-			IndexType: "document",
+			IndexType: testIndexType,
 			Source:    randomSource(rng),
 		}
 	}
@@ -199,7 +203,7 @@ func buildRegularDocs(rng *rand.Rand, n int) []testDocument {
 		docs[i] = testDocument{
 			ID:        fixedIDs[i%testFixedIDPoolSize],
 			Index:     testIndexName,
-			IndexType: "document",
+			IndexType: testIndexType,
 			Source:    randomSource(rng),
 		}
 	}

@@ -663,7 +663,7 @@ func (worker *IndexingWorkerV8) applyMerges(
 		for _, cmd := range commands {
 			mergedDoc = ApplyMergeLight(mergedDoc, cmd)
 		}
-		mergedDoc.IndexType = "document"
+		mergedDoc.IndexType = indexTypeDocument
 
 		docsToIndex = append(docsToIndex, mergedDoc)
 	}
