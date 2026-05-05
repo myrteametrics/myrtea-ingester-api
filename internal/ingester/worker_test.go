@@ -132,7 +132,8 @@ func TestDirectBulkChainedUpdate(t *testing.T) {
 		{
 			Index: "myotherotherindex", DocumentID: "5", DocumentType: docType, MergeConfig: mergeConfig,
 			NewDoc: models.Document{
-				Index: "myotherotherindex", ID: "5", IndexType: indexTypeDocument, Source: map[string]any{"update": "data"},
+				Index: "myotherotherindex", ID: "5", IndexType: indexTypeDocument,
+				Source: map[string]any{"update": "data"},
 			},
 		},
 	}
