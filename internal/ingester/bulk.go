@@ -54,16 +54,16 @@ func (ingester *BulkIngester) Ingest(bir BulkIngestRequest) error {
 		return ErrDocumentTypeEmpty
 	}
 
-	// For non-append-only requests a merge config is mandatory; reject early so
-	// callers get a clear error instead of silently indexing garbage via the
-	// zero-value connector.Config that ApplyMergeLight cannot handle.
 	var mergeConfig connector.Config
-	if bir.AppendOnly {
-		// merge config is unused for append-only; leave it as zero value
-	} else if len(bir.MergeConfig) > 0 {
-		mergeConfig = bir.MergeConfig[0]
-	} else {
-		return errors.New("merge config is required for non-append-only requests")
+	if !bir.AppendOnly {
+		// For non-append-only requests a merge config is mandatory; reject early
+		// so callers get a clear error instead of silently indexing garbage via
+		// the zero-value connector.Config that ApplyMergeLight cannot handle.
+		if len(bir.MergeConfig) > 0 {
+			mergeConfig = bir.MergeConfig[0]
+		} else {
+			return errors.New("merge config is required for non-append-only requests")
+		}
 	}
 	typedIngester := ingester.getTypedIngester(bir.DocumentType)
 

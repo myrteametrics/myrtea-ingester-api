@@ -28,7 +28,12 @@ func NewIndexingWorker(typedIngester *TypedIngester, id int) (IndexingWorker, er
 	return NewIndexingWorkerV8(typedIngester, id, mgetBatchSize), nil
 }
 
-const moduleName = "typedingester"
+const (
+	moduleName        = "typedingester"
+	metricNamespace   = "myrtea"
+	labelWorkerID     = "workerid"
+	indexTypeDocument = "document"
+)
 
 // ─── Prometheus metric descriptors ────────────────────────────────────────────
 // All metrics are label-free at declaration time; labels are added per-worker
@@ -36,65 +41,65 @@ const moduleName = "typedingester"
 
 var (
 	_metricWorkerQueueGauge = prometheus.NewGaugeFrom(stdprometheus.GaugeOpts{
-		Namespace: "myrtea",
+		Namespace: metricNamespace,
 		Name:      "worker_queue",
 		Help:      "Number of UpdateCommands currently waiting in the worker's inbound channel.",
-	}, []string{moduleName, "workerid"})
+	}, []string{moduleName, labelWorkerID})
 
 	_metricWorkerMessage = prometheus.NewCounterFrom(stdprometheus.CounterOpts{
-		Namespace: "myrtea",
+		Namespace: metricNamespace,
 		Name:      "worker_message_published",
 		Help:      "Total number of UpdateCommands flushed to Elasticsearch, partitioned by status.",
-	}, []string{moduleName, "workerid", "status"})
+	}, []string{moduleName, labelWorkerID, "status"})
 
 	_metricWorkerFlushDuration = prometheus.NewHistogramFrom(stdprometheus.HistogramOpts{
-		Namespace: "myrtea",
+		Namespace: metricNamespace,
 		Name:      "worker_flush_duration_seconds",
 		Help:      "End-to-end duration of one flushEsBuffer call (mget + merge + bulk write), in seconds.",
 		Buckets:   []float64{1, 2.5, 5, 10, 20, 30, 60, 120, 300, 600},
-	}, []string{moduleName, "workerid"})
+	}, []string{moduleName, labelWorkerID})
 
 	_metricWorkerBulkInsertDuration = prometheus.NewHistogramFrom(stdprometheus.HistogramOpts{
-		Namespace: "myrtea",
+		Namespace: metricNamespace,
 		Name:      "worker_bulk_insert_duration_seconds",
 		Help:      "Duration of the raw HTTP bulk request to Elasticsearch, in seconds.",
 		Buckets:   []float64{.05, .1, .25, .5, 1, 2.5, 5, 10, 15, 25, 45},
-	}, []string{moduleName, "workerid"})
+	}, []string{moduleName, labelWorkerID})
 
 	_metricWorkerBulkIndexDuration = prometheus.NewHistogramFrom(stdprometheus.HistogramOpts{
-		Namespace: "myrtea",
+		Namespace: metricNamespace,
 		Name:      "worker_bulk_index_duration_seconds",
 		Help:      "Duration of the bulkIndex / bulkCreate step (includes HTTP + response parsing), in seconds.",
 		Buckets:   []float64{1, 2.5, 5, 10, 20, 30, 60, 120, 300, 600},
-	}, []string{moduleName, "workerid"})
+	}, []string{moduleName, labelWorkerID})
 
 	_metricWorkerApplyMergesDuration = prometheus.NewHistogramFrom(stdprometheus.HistogramOpts{
-		Namespace: "myrtea",
+		Namespace: metricNamespace,
 		Name:      "worker_apply_merges_duration_seconds",
 		Help:      "Duration of the in-memory merge step (applyMerges / applyDirectMerges), in seconds.",
 		Buckets:   []float64{1, 2.5, 5, 10, 20, 30, 60, 120, 300, 600},
-	}, []string{moduleName, "workerid"})
+	}, []string{moduleName, labelWorkerID})
 
 	_metricWorkerDirectMultiGetDuration = prometheus.NewHistogramFrom(stdprometheus.HistogramOpts{
-		Namespace: "myrtea",
+		Namespace: metricNamespace,
 		Name:      "worker_direct_multi_get_duration_seconds",
 		Help:      "Duration of the mget lookup step (directMultiGetDocs or multiGetFindRefDocsFullV2), in seconds.",
 		Buckets:   []float64{1, 2.5, 5, 10, 20, 30, 60, 120, 300, 600},
-	}, []string{moduleName, "workerid"})
+	}, []string{moduleName, labelWorkerID})
 
 	_metricWorkerBulkIndexBuildBufferDuration = prometheus.NewHistogramFrom(stdprometheus.HistogramOpts{
-		Namespace: "myrtea",
+		Namespace: metricNamespace,
 		Name:      "worker_bulk_index_build_buffer_duration_seconds",
 		Help:      "Duration of the NDJSON payload serialisation step before sending the bulk request, in seconds.",
 		Buckets:   []float64{1, 2.5, 5, 10, 20, 30, 60, 120, 300, 600},
-	}, []string{moduleName, "workerid"})
+	}, []string{moduleName, labelWorkerID})
 
 	_metricWorkerGetIndicesDuration = prometheus.NewHistogramFrom(stdprometheus.HistogramOpts{
-		Namespace: "myrtea",
+		Namespace: metricNamespace,
 		Name:      "worker_get_indices_duration_seconds",
 		Help:      "Duration of the alias-resolution step (getIndices), in seconds. Only applicable when ELASTICSEARCH_DIRECT_MULTI_GET_MODE=false.",
 		Buckets:   []float64{.05, .1, .25, .5, 1, 2.5, 5, 10, 15, 25, 45},
-	}, []string{moduleName, "workerid"})
+	}, []string{moduleName, labelWorkerID})
 )
 
 // ─── Merge logic ───────────────────────────────────────────────────────────────

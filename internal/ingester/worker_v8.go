@@ -126,7 +126,7 @@ func NewIndexingWorkerV8(typedIngester *TypedIngester, id, mgetBatchSize int) *I
 	}
 
 	labelWith := func(labels ...string) []string {
-		return append([]string{"typedingester", typedIngester.DocumentType, "workerid", strconv.Itoa(id)}, labels...)
+		return append([]string{"typedingester", typedIngester.DocumentType, labelWorkerID, strconv.Itoa(id)}, labels...)
 	}
 
 	worker := &IndexingWorkerV8{
@@ -338,7 +338,7 @@ func (worker *IndexingWorkerV8) appendOnlyBulkIndex(commands []UpdateCommand) {
 		docsToInsert = append(docsToInsert, models.Document{
 			ID:        cmd.NewDoc.ID,
 			Index:     targetIndex,
-			IndexType: "document",
+			IndexType: indexTypeDocument,
 			Source:    cmd.NewDoc.Source,
 		})
 	}
@@ -591,7 +591,7 @@ func (worker *IndexingWorkerV8) multiGetFindRefDocsV2(
 		zap.L().Error("multiGetFindRefDocsV2: mget failed", zap.Error(err))
 		return &mgetResponse{Docs: make([]mgetResponseItem, 0)}, err
 	}
-	if response.Docs == nil || len(response.Docs) == 0 {
+	if len(response.Docs) == 0 {
 		return &mgetResponse{Docs: make([]mgetResponseItem, 0)}, nil
 	}
 

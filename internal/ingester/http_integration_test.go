@@ -28,6 +28,7 @@ package ingester_test
 
 import (
 	"bytes"
+	"encoding/hex"
 	"fmt"
 	"math/rand"
 	"net/http"
@@ -158,7 +159,7 @@ func randomSource(rng *rand.Rand) map[string]any {
 func randomHex(rng *rand.Rand, n int) string {
 	b := make([]byte, n)
 	rng.Read(b)
-	return fmt.Sprintf("%x", b)
+	return hex.EncodeToString(b)
 }
 
 func randomTagSubset(rng *rand.Rand) []string {
@@ -175,14 +176,13 @@ func randomTagSubset(rng *rand.Rand) []string {
 
 // buildAppendOnlyDocs generates n documents for AppendOnly=true.
 // IDs are left empty so Elasticsearch auto-generates them.
-// The index can be set explicitly or left empty to fall back to the alias.
-func buildAppendOnlyDocs(rng *rand.Rand, n int, index string) []testDocument {
+func buildAppendOnlyDocs(rng *rand.Rand, n int) []testDocument {
 	docs := make([]testDocument, n)
 	for i := range docs {
 		docs[i] = testDocument{
 			// Empty ID → ES auto-generates; avoids 409 conflicts on re-runs.
 			ID:        "",
-			Index:     index,
+			Index:     testIndexName,
 			IndexType: "document",
 			Source:    randomSource(rng),
 		}
@@ -193,12 +193,12 @@ func buildAppendOnlyDocs(rng *rand.Rand, n int, index string) []testDocument {
 // buildRegularDocs generates n documents for AppendOnly=false.
 // IDs are drawn from the fixed pool so that consecutive runs merge on the
 // same documents (exercising the mget → merge path).
-func buildRegularDocs(rng *rand.Rand, n int, index string) []testDocument {
+func buildRegularDocs(rng *rand.Rand, n int) []testDocument {
 	docs := make([]testDocument, n)
 	for i := range docs {
 		docs[i] = testDocument{
 			ID:        fixedIDs[i%testFixedIDPoolSize],
-			Index:     index,
+			Index:     testIndexName,
 			IndexType: "document",
 			Source:    randomSource(rng),
 		}
@@ -219,7 +219,7 @@ func sendIngestRequest(t *testing.T, payload bulkIngestPayload) {
 	}
 
 	url := httpBaseURL + httpIngestPath
-	resp, err := http.Post(url, "application/json", bytes.NewReader(body)) //nolint:noctx
+	resp, err := http.Post(url, "application/json", bytes.NewReader(body))
 	if err != nil {
 		t.Fatalf("POST %s failed: %v", url, err)
 	}
@@ -259,7 +259,7 @@ func TestHTTPIngestAppendOnly(t *testing.T) {
 		DocumentType: testDocType,
 		AppendOnly:   true,
 		// MergeConfig is intentionally omitted – not needed for append-only.
-		Docs: buildAppendOnlyDocs(rng, testDocCount, testIndexName),
+		Docs: buildAppendOnlyDocs(rng, testDocCount),
 	}
 
 	t.Logf("Sending %d append-only documents to documentType=%q index=%q",
@@ -286,7 +286,7 @@ func TestHTTPIngestRegular(t *testing.T) {
 		DocumentType: testDocType,
 		AppendOnly:   false,
 		MergeConfig:  []mergeConfig{defaultMergeConfig()},
-		Docs:         buildRegularDocs(rng, testDocCount, testIndexName),
+		Docs:         buildRegularDocs(rng, testDocCount),
 	}
 
 	t.Logf("Sending %d regular documents (AppendOnly=false) to documentType=%q index=%q",
@@ -310,7 +310,7 @@ func TestHTTPIngestBoth(t *testing.T) {
 			DocumentType: testDocType,
 			AppendOnly:   false,
 			MergeConfig:  []mergeConfig{defaultMergeConfig()},
-			Docs:         buildRegularDocs(rng, testDocCount, testIndexName),
+			Docs:         buildRegularDocs(rng, testDocCount),
 		}
 		t.Logf("Sending %d regular documents", len(payload.Docs))
 		sendIngestRequest(t, payload)
@@ -322,7 +322,7 @@ func TestHTTPIngestBoth(t *testing.T) {
 			UUID:         uuid.New().String(),
 			DocumentType: testDocType,
 			AppendOnly:   true,
-			Docs:         buildAppendOnlyDocs(rng, testDocCount, testIndexName),
+			Docs:         buildAppendOnlyDocs(rng, testDocCount),
 		}
 		t.Logf("Sending %d append-only documents", len(payload.Docs))
 		sendIngestRequest(t, payload)
@@ -352,9 +352,9 @@ func TestHTTPIngestHighVolume(t *testing.T) {
 
 		var docs []testDocument
 		if appendOnly {
-			docs = buildAppendOnlyDocs(rng, volumeDocCount, testIndexName)
+			docs = buildAppendOnlyDocs(rng, volumeDocCount)
 		} else {
-			docs = buildRegularDocs(rng, volumeDocCount, testIndexName)
+			docs = buildRegularDocs(rng, volumeDocCount)
 		}
 
 		var mc []mergeConfig
@@ -396,9 +396,9 @@ func TestHTTPIngestCustom(t *testing.T) {
 	var docs []testDocument
 	var mc []mergeConfig
 	if appendOnly {
-		docs = buildAppendOnlyDocs(rng, docCount, testIndexName)
+		docs = buildAppendOnlyDocs(rng, docCount)
 	} else {
-		docs = buildRegularDocs(rng, docCount, testIndexName)
+		docs = buildRegularDocs(rng, docCount)
 		mc = []mergeConfig{defaultMergeConfig()}
 	}
 

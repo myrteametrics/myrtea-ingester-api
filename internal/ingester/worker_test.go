@@ -24,22 +24,22 @@ func TestDirectBulkChainedUpdate2(t *testing.T) {
 	indexingWorker := NewIndexingWorkerV8(typedIngester, 1, 500)
 
 	_, _ = esapi.IndicesDeleteRequest{
-		AllowNoIndices: esapi.BoolPtr(true),
+		AllowNoIndices: new(true),
 		Index:          []string{"myindex"},
 	}.Do(context.Background(), elasticsearch.C())
 	_, _ = esapi.IndicesDeleteRequest{
-		AllowNoIndices: esapi.BoolPtr(true),
+		AllowNoIndices: new(true),
 		Index:          []string{"myotherindex"},
 	}.Do(context.Background(), elasticsearch.C())
 	_, _ = esapi.IndicesDeleteRequest{
-		AllowNoIndices: esapi.BoolPtr(true),
+		AllowNoIndices: new(true),
 		Index:          []string{"myotherotherindex"},
 	}.Do(context.Background(), elasticsearch.C())
 
 	docs := []models.Document{
-		{IndexType: "document", Index: "myindex", ID: "1", Source: map[string]any{"a": "a", "b": "b"}},
-		{IndexType: "document", Index: "myindex", ID: "2", Source: map[string]any{"a": "a", "b": "b"}},
-		{IndexType: "document", Index: "myotherindex", ID: "4", Source: map[string]any{"a": "a", "b": "b"}},
+		{IndexType: indexTypeDocument, Index: "myindex", ID: "1", Source: map[string]any{"a": "a", "b": "b"}},
+		{IndexType: indexTypeDocument, Index: "myindex", ID: "2", Source: map[string]any{"a": "a", "b": "b"}},
+		{IndexType: indexTypeDocument, Index: "myotherindex", ID: "4", Source: map[string]any{"a": "a", "b": "b"}},
 	}
 	indexingWorker.bulkIndex(docs)
 	t.Fail()
@@ -63,74 +63,74 @@ func TestDirectBulkChainedUpdate(t *testing.T) {
 		{
 			Index: "myindex", DocumentID: "1", DocumentType: "document", MergeConfig: mergeConfig,
 			NewDoc: models.Document{
-				Index: "myindex", ID: "1", IndexType: "document", Source: map[string]any{"update": "data"}},
+				Index: "myindex", ID: "1", IndexType: indexTypeDocument, Source: map[string]any{"update": "data"}},
 		},
 		{
 			Index: "myindex", DocumentID: "1", DocumentType: "document", MergeConfig: mergeConfig,
 			NewDoc: models.Document{
-				Index: "myindex", ID: "1", IndexType: "document", Source: map[string]any{"update": "data"}},
+				Index: "myindex", ID: "1", IndexType: indexTypeDocument, Source: map[string]any{"update": "data"}},
 		},
 		{
 			Index: "myindex", DocumentID: "1", DocumentType: "document", MergeConfig: mergeConfig,
 			NewDoc: models.Document{
-				Index: "myindex", ID: "1", IndexType: "document", Source: map[string]any{"update": "data"}},
+				Index: "myindex", ID: "1", IndexType: indexTypeDocument, Source: map[string]any{"update": "data"}},
 		},
 		{
 			Index: "myindex", DocumentID: "2", DocumentType: "document", MergeConfig: mergeConfig,
 			NewDoc: models.Document{
-				Index: "myindex", ID: "2", IndexType: "document", Source: map[string]any{"update": "data"}},
+				Index: "myindex", ID: "2", IndexType: indexTypeDocument, Source: map[string]any{"update": "data"}},
 		},
 		{
 			Index: "myindex", DocumentID: "2", DocumentType: "document", MergeConfig: mergeConfig,
 			NewDoc: models.Document{
-				Index: "myindex", ID: "2", IndexType: "document", Source: map[string]any{"update": "data"}},
+				Index: "myindex", ID: "2", IndexType: indexTypeDocument, Source: map[string]any{"update": "data"}},
 		},
 		{
 			Index: "myindex", DocumentID: "2", DocumentType: "document", MergeConfig: mergeConfig,
 			NewDoc: models.Document{
-				Index: "myindex", ID: "2", IndexType: "document", Source: map[string]any{"update": "data"},
+				Index: "myindex", ID: "2", IndexType: indexTypeDocument, Source: map[string]any{"update": "data"},
 			},
 		},
 		{
 			Index: "myotherindex", DocumentID: "3", DocumentType: "document", MergeConfig: mergeConfig,
 			NewDoc: models.Document{
-				Index: "myotherindex", ID: "3", IndexType: "document", Source: map[string]any{"update": "data"},
+				Index: "myotherindex", ID: "3", IndexType: indexTypeDocument, Source: map[string]any{"update": "data"},
 			},
 		},
 		{
 			Index: "myotherindex", DocumentID: "3", DocumentType: "document", MergeConfig: mergeConfig,
 			NewDoc: models.Document{
-				Index: "myotherindex", ID: "3", IndexType: "document", Source: map[string]any{"update": "data"},
+				Index: "myotherindex", ID: "3", IndexType: indexTypeDocument, Source: map[string]any{"update": "data"},
 			},
 		},
 		{
 			Index: "myotherindex", DocumentID: "3", DocumentType: "document", MergeConfig: mergeConfig,
 			NewDoc: models.Document{
-				Index: "myotherindex", ID: "3", IndexType: "document", Source: map[string]any{"update": "data"},
+				Index: "myotherindex", ID: "3", IndexType: indexTypeDocument, Source: map[string]any{"update": "data"},
 			},
 		},
 		{
 			Index: "myotherindex", DocumentID: "4", DocumentType: "document", MergeConfig: mergeConfig,
 			NewDoc: models.Document{
-				Index: "myotherindex", ID: "4", IndexType: "document", Source: map[string]any{"update": "data"},
+				Index: "myotherindex", ID: "4", IndexType: indexTypeDocument, Source: map[string]any{"update": "data"},
 			},
 		},
 		{
 			Index: "myotherindex", DocumentID: "4", DocumentType: "document", MergeConfig: mergeConfig,
 			NewDoc: models.Document{
-				Index: "myotherindex", ID: "4", IndexType: "document", Source: map[string]any{"update": "data"},
+				Index: "myotherindex", ID: "4", IndexType: indexTypeDocument, Source: map[string]any{"update": "data"},
 			},
 		},
 		{
 			Index: "myotherindex", DocumentID: "4", DocumentType: "document", MergeConfig: mergeConfig,
 			NewDoc: models.Document{
-				Index: "myotherindex", ID: "4", IndexType: "document", Source: map[string]any{"update": "data"},
+				Index: "myotherindex", ID: "4", IndexType: indexTypeDocument, Source: map[string]any{"update": "data"},
 			},
 		},
 		{
 			Index: "myotherotherindex", DocumentID: "5", DocumentType: "document", MergeConfig: mergeConfig,
 			NewDoc: models.Document{
-				Index: "myotherotherindex", ID: "5", IndexType: "document", Source: map[string]any{"update": "data"},
+				Index: "myotherotherindex", ID: "5", IndexType: indexTypeDocument, Source: map[string]any{"update": "data"},
 			},
 		},
 	}
@@ -251,6 +251,7 @@ func TestFlushEsBufferSplitDryRun(t *testing.T) {
 
 	// Must not panic; with DRY_RUN the method returns before any ES call.
 	worker.flushEsBuffer(buffer)
+	t.Log("flushEsBuffer completed without panic (dry-run mode)")
 }
 
 // TestAppendOnlyUsesDocumentIndex verifies that appendOnlyBulkIndex respects the
