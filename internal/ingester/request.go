@@ -12,6 +12,7 @@ type IngestRequest struct {
 	DocumentType string           `json:"documentType"`
 	MergeConfig  connector.Config `json:"merge"`
 	Doc          models.Document  `json:"docs"`
+	AppendOnly   bool             `json:"appendOnly"`
 }
 
 // BulkIngestRequest wrap a collection of ingestion request (multiple documents with multiple mergeconfigs)
@@ -20,4 +21,8 @@ type BulkIngestRequest struct {
 	DocumentType string             `json:"documentType"`
 	MergeConfig  []connector.Config `json:"merge"`
 	Docs         []models.Document  `json:"docs"`
+	// AppendOnly disables any document lookup (mget) before indexing.
+	// When true, documents are inserted directly without merging with existing ones.
+	// This is ideal for append-only workloads such as logs. Defaults to false.
+	AppendOnly bool `json:"appendOnly"`
 }

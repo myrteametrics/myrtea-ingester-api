@@ -6,6 +6,7 @@ import (
 	"time"
 
 	ttlcache "github.com/myrteametrics/myrtea-sdk/v5/cache"
+	"github.com/myrteametrics/myrtea-sdk/v5/connector"
 	"go.uber.org/zap"
 )
 
@@ -53,7 +54,17 @@ func (ingester *BulkIngester) Ingest(bir BulkIngestRequest) error {
 		return ErrDocumentTypeEmpty
 	}
 
-	mergeConfig := bir.MergeConfig[0]
+	var mergeConfig connector.Config
+	if !bir.AppendOnly {
+		// For non-append-only requests a merge config is mandatory; reject early
+		// so callers get a clear error instead of silently indexing garbage via
+		// the zero-value connector.Config that ApplyMergeLight cannot handle.
+		if len(bir.MergeConfig) > 0 {
+			mergeConfig = bir.MergeConfig[0]
+		} else {
+			return errors.New("merge config is required for non-append-only requests")
+		}
+	}
 	typedIngester := ingester.getTypedIngester(bir.DocumentType)
 
 	if len(typedIngester.Data)+len(bir.Docs) >= cap(typedIngester.Data) {
@@ -72,6 +83,7 @@ func (ingester *BulkIngester) Ingest(bir BulkIngestRequest) error {
 			DocumentType: bir.DocumentType,
 			MergeConfig:  mergeConfig,
 			Doc:          doc,
+			AppendOnly:   bir.AppendOnly,
 		}
 		zap.L().Debug("Send IngestRequest", zap.String("BulkUUID", bir.UUID), zap.Int("RequestUUID", i),
 			zap.Any("IngestRequest", ir), zap.Any("len(chan)", len(typedIngester.Data)))

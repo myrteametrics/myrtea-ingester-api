@@ -60,7 +60,7 @@ func main() {
 	done := make(chan os.Signal, 1)
 	apiKey := viper.GetString("ENGINE_API_KEY")
 
-	router := router.NewChiRouterSimple(router.ConfigSimple{
+	simpleRouter := router.NewChiRouterSimple(router.ConfigSimple{
 		Production:              viper.GetBool("LOGGER_PRODUCTION"),
 		CORS:                    viper.GetBool("HTTP_SERVER_API_ENABLE_CORS"),
 		Security:                viper.GetBool("HTTP_SERVER_API_ENABLE_SECURITY"),
@@ -79,9 +79,9 @@ func main() {
 	})
 	var srv *http.Server
 	if serverEnableTLS {
-		srv = server.NewSecuredServer(serverPort, serverTLSCert, serverTLSKey, router)
+		srv = server.NewSecuredServer(serverPort, serverTLSCert, serverTLSKey, simpleRouter)
 	} else {
-		srv = server.NewUnsecuredServer(serverPort, router)
+		srv = server.NewUnsecuredServer(serverPort, simpleRouter)
 	}
 
 	signal.Notify(done, os.Interrupt, syscall.SIGINT, syscall.SIGTERM)
