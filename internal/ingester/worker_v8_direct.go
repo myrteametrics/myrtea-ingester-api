@@ -55,6 +55,7 @@ func (worker *IndexingWorkerV8) directBulkChainedUpdate(commandGroups [][]Update
 			zap.Int("WorkerID", worker.ID),
 			zap.Int("affectedGroups", len(commandGroups)),
 		)
+		flushAborted(worker.TypedIngester.DocumentType, "multiget")
 		return
 	}
 

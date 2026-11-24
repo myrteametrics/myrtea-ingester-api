@@ -1,6 +1,7 @@
 package ingester
 
 import (
+	"errors"
 	"fmt"
 	"strings"
 
@@ -28,6 +29,24 @@ func NewIndexingWorker(typedIngester *TypedIngester, id int) (IndexingWorker, er
 	return NewIndexingWorkerV8(typedIngester, id, mgetBatchSize), nil
 }
 
+// flushAborted counts a batch abandoned before the write (reason: "multiget" or "indices").
+func flushAborted(documentType, reason string) {
+	_metricWorkerFlushAborted.With(moduleName, documentType, "reason", reason).Add(1)
+}
+
+// recordBulkOutcome counts one bulk write and, when Elasticsearch refused some documents, how many.
+func recordBulkOutcome(documentType string, err error) {
+	status := "ok"
+	if err != nil {
+		status = "error"
+	}
+	_metricWorkerBulkRequests.With(moduleName, documentType, "status", status).Add(1)
+	var partial *bulkPartialError
+	if errors.As(err, &partial) {
+		_metricWorkerBulkFailedDocuments.With(moduleName, documentType).Add(float64(partial.failed))
+	}
+}
+
 const (
 	moduleName        = "typedingester"
 	metricNamespace   = "myrtea"
@@ -51,6 +70,26 @@ var (
 		Name:      "worker_message_published",
 		Help:      "Total number of UpdateCommands flushed to Elasticsearch, partitioned by status.",
 	}, []string{moduleName, labelWorkerID, "status"})
+
+	// Failures that used to be visible only as log lines (plan 02, instrumentation sheets 2 and 3).
+	// Labelled by document type only: the worker id would multiply the series for no diagnostic gain.
+	_metricWorkerFlushAborted = prometheus.NewCounterFrom(stdprometheus.CounterOpts{
+		Namespace: metricNamespace,
+		Name:      "worker_flush_aborted_total",
+		Help:      "Batches abandoned before being written because a safe merge was impossible (reason: multiget or indices); the documents of the batch are not written.",
+	}, []string{moduleName, "reason"})
+
+	_metricWorkerBulkRequests = prometheus.NewCounterFrom(stdprometheus.CounterOpts{
+		Namespace: metricNamespace,
+		Name:      "worker_bulk_requests_total",
+		Help:      "Elasticsearch bulk write requests, partitioned by status (ok, error). An error also covers a request where some documents were refused.",
+	}, []string{moduleName, "status"})
+
+	_metricWorkerBulkFailedDocuments = prometheus.NewCounterFrom(stdprometheus.CounterOpts{
+		Namespace: metricNamespace,
+		Name:      "worker_bulk_failed_documents_total",
+		Help:      "Documents that Elasticsearch refused inside an otherwise accepted bulk request (mapping, conflict...).",
+	}, []string{moduleName})
 
 	_metricWorkerFlushDuration = prometheus.NewHistogramFrom(stdprometheus.HistogramOpts{
 		Namespace: metricNamespace,

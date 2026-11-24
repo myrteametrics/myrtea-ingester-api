@@ -406,6 +406,7 @@ func (worker *IndexingWorkerV8) bulkChainedUpdate(commandGroups [][]UpdateComman
 			zap.Int("WorkerID", worker.ID),
 			zap.Int("affectedGroups", len(commandGroups)),
 		)
+		flushAborted(worker.TypedIngester.DocumentType, "indices")
 		return
 	}
 
@@ -837,6 +838,18 @@ func buildBulkIndexItem(targetIndex, id string, source any) ([]string, error) {
 // TODO(es): consider adding "require_alias": true to the bulk meta so that a
 // misconfigured write on a concrete index (instead of the alias) fails loudly.
 func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
+	err := worker.bulkIndexRequest(docs)
+	recordBulkOutcome(worker.TypedIngester.DocumentType, err)
+	return err
+}
+
+// bulkPartialError is returned when Elasticsearch accepted the bulk request but refused some documents.
+type bulkPartialError struct{ failed int }
+
+func (e *bulkPartialError) Error() string { return "bulkIndex: one or more documents failed" }
+
+// bulkIndexRequest builds and sends the bulk request (see bulkIndex, which also counts the outcome).
+func (worker *IndexingWorkerV8) bulkIndexRequest(docs []models.Document) error {
 	ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 	defer cancel()
 
@@ -912,7 +925,7 @@ func (worker *IndexingWorkerV8) bulkIndex(docs []models.Document) error {
 			errorCounts[item["index"].Error.Type]++
 		}
 		zap.L().Warn("bulkIndex: error type breakdown", zap.Any("errors", errorCounts))
-		return errors.New("bulkIndex: one or more documents failed")
+		return &bulkPartialError{failed: len(failed)}
 	}
 	return nil
 }
