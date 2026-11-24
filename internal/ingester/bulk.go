@@ -73,6 +73,7 @@ func (ingester *BulkIngester) Ingest(bir BulkIngestRequest) error {
 		for _, worker := range typedIngester.Workers {
 			worker.GetMetricWorkerQueueGauge().Set(float64(len(worker.GetData())))
 		}
+		typedIngester.metricTypedIngesterRejected.Add(1)
 		return ErrChannelOverload
 	}
 

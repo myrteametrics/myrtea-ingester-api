@@ -7,6 +7,17 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 
 ## [Unreleased]
 
+## [v5.3.5] - 2026-11-24
+
+### Added
+
+- Metric `myrtea_worker_flush_aborted_total{typedingester,reason}`: batches abandoned before the write because the
+  safe merge was impossible (`multiget` or `indices`); until now only an error log line
+- Metrics `myrtea_worker_bulk_requests_total{typedingester,status}` (`ok` / `error`) and
+  `myrtea_worker_bulk_failed_documents_total{typedingester}`: Elasticsearch bulk writes and the documents it refused
+- Metric `<namespace>_typedingester_rejected_total{typedingester}`: ingest requests refused (HTTP 429) because the
+  entry list of that document type was full
+
 ## [v5.3.4] - 2026-09-17
 
 ### Changed

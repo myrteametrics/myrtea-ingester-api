@@ -30,6 +30,7 @@ type TypedIngester struct {
 	Workers                       map[int]IndexingWorker
 	maxWorkers                    uint32
 	metricTypedIngesterQueueGauge metrics.Gauge
+	metricTypedIngesterRejected   metrics.Counter
 }
 
 var (
@@ -38,6 +39,13 @@ var (
 		ConstLabels: config.MetricPrometheusLabels,
 		Name:        "typedingester_queue",
 		Help:        "this is the help string for typedingester_queue",
+	}, []string{"typedingester"})
+
+	_metricTypedIngesterRejected = prometheus.NewCounterFrom(stdprometheus.CounterOpts{
+		Namespace:   config.MetricNamespace,
+		ConstLabels: config.MetricPrometheusLabels,
+		Name:        "typedingester_rejected_total",
+		Help:        "Ingest requests refused because the entry list of this document type was full (HTTP 429), by document type.",
 	}, []string{"typedingester"})
 )
 
@@ -51,7 +59,9 @@ func NewTypedIngester(bulkIngester *BulkIngester, documentType string) *TypedIng
 		Workers:                       make(map[int]IndexingWorker),
 		maxWorkers:                    viper.GetUint32("INGESTER_MAXIMUM_WORKERS"),
 		metricTypedIngesterQueueGauge: _metricTypedIngesterQueueGauge.With("typedingester", documentType),
+		metricTypedIngesterRejected:   _metricTypedIngesterRejected.With("typedingester", documentType),
 	}
+	ingester.metricTypedIngesterRejected.Add(0)
 	_metricTypedIngesterQueueGauge.With("typedingester", documentType).Set(0)
 
 	for i := range int(ingester.maxWorkers) {
